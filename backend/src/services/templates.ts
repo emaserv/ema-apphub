@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { BuildConfig, TECHNOLOGIES } from './detector';
+import { NODE_DEFAULT } from './nodeVersion';
 
 /**
  * Generadores de Dockerfile por tecnología. Cada plantilla produce una imagen
@@ -24,7 +25,7 @@ function spa(tech: string, bc: BuildConfig): string {
   const out = bc.outputDir || 'dist';
   return `${header(tech)}
 # ---------- build ----------
-FROM node:${bc.nodeVersion || '20'}-alpine AS build
+FROM node:${bc.nodeVersion || NODE_DEFAULT}-alpine AS build
 WORKDIR /app
 COPY ${LOCKS} ./
 RUN ${nodeInstall(bc)}
@@ -45,7 +46,7 @@ EXPOSE 80
 
 function nodeServer(tech: string, bc: BuildConfig, port: number): string {
   return `${header(tech)}
-FROM node:${bc.nodeVersion || '20'}-alpine
+FROM node:${bc.nodeVersion || NODE_DEFAULT}-alpine
 WORKDIR /app
 RUN apk add --no-cache tini
 COPY ${LOCKS} ./
