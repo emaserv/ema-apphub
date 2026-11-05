@@ -103,6 +103,43 @@ describe('parseDotenv (importar variables)', () => {
   test('"\\n" entre comillas dobles es un salto de línea', () => {
     assert.deepEqual(parseDotenv('A="linea1\\nlinea2"'), [{ key: 'A', value: 'linea1\nlinea2' }]);
   });
+
+  test('entre comillas simples el valor es literal', () => {
+    assert.deepEqual(parseDotenv(`A='sin \\n escapes $$ "x"'`), [{ key: 'A', value: 'sin \\n escapes $$ "x"' }]);
+  });
+
+  test('comillas sin cerrar: se toma el valor tal cual', () => {
+    assert.deepEqual(parseDotenv('A="abc'), [{ key: 'A', value: '"abc' }]);
+  });
+
+  // Bug: el export escribe los secretos como "CLAVE=  # secreto" y el import tomaba "# secreto" como valor,
+  // pisando la contraseña real. Con valor vacío, el import conserva el secreto existente.
+  test('un secreto exportado se lee como valor vacío, no como "# secreto"', () => {
+    assert.deepEqual(parseDotenv('DB_PASSWORD=  # secreto\nJWT_SECRET=  # secreto (sistema)'), [
+      { key: 'DB_PASSWORD', value: '' }, { key: 'JWT_SECRET', value: '' },
+    ]);
+  });
+});
+
+describe('exportar → importar devuelve los mismos valores', () => {
+  const VALUES = [
+    'simple', '', 'hola mundo', 'precio $5', 'a$$b', '${NO_EXPANDIR}', 'dijo "hola"', "it's", 'C:\\temp\\app',
+    'termina en barra\\', 'l1\nl2', 'abc #123', '#empieza-con-numeral', 'color#rojo', 'postgres://u:p@h:5432/db?ssl=true',
+    '  espacios alrededor  ', '\\n literal', 'ñandú 🚀', 'a=b=c',
+  ];
+
+  for (const v of VALUES) {
+    test(JSON.stringify(v), () => {
+      assert.deepEqual(parseDotenv(toDotenvLine('X', v)), [{ key: 'X', value: v }]);
+    });
+  }
+
+  test('archivo completo, con el formato del endpoint de exportación', () => {
+    const vars = { NODE_ENV: 'production', MSG: 'hola "mundo" $1', RUTA: 'C:\\x' };
+    const file = ['# Tienda — production — exportado 2026-11-05T12:00:00.000Z', '# Los valores secretos no se exportan (vacíos).',
+      ...Object.entries(vars).map(([k, v]) => toDotenvLine(k, v)), 'API_TOKEN=  # secreto'].join('\n') + '\n';
+    assert.deepEqual(parseDotenv(file), [...Object.entries(vars).map(([key, value]) => ({ key, value })), { key: 'API_TOKEN', value: '' }]);
+  });
 });
 
 describe('toDotenvLine (escribir el .env que lee Docker Compose)', () => {
