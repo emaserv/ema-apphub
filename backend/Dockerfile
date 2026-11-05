@@ -1,5 +1,5 @@
 # EMA AppHub · backend (contexto de build: raíz del repositorio)
-FROM node:20-alpine AS build
+FROM node:24-alpine AS build
 WORKDIR /app
 COPY backend/package.json backend/package-lock.json ./
 RUN npm ci
@@ -7,7 +7,7 @@ COPY backend/tsconfig.json ./
 COPY backend/src ./src
 RUN npm run build && npm prune --omit=dev
 
-FROM node:20-alpine
+FROM node:24-alpine
 # Docker CLI + Compose + Buildx para builds/deploys, git/ssh para repositorios, tar para backups
 RUN apk add --no-cache docker-cli docker-cli-compose docker-cli-buildx git openssh-client tar tini ca-certificates tzdata wget
 WORKDIR /app

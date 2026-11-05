@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { BuildConfig, TECHNOLOGIES } from './detector';
 import { NODE_DEFAULT } from './nodeVersion';
+import { ALPINE_IMAGE, DOTNET_DEFAULT, GO_DEFAULT, NGINX_IMAGE } from './imageVersions';
 
 /**
  * Generadores de Dockerfile por tecnología. Cada plantilla produce una imagen
@@ -37,7 +38,7 @@ RUN set -e; d="${out}"; \\
     mkdir -p /out && cp -r "$d"/. /out/
 
 # ---------- runtime ----------
-FROM nginx:1.27-alpine
+FROM ${NGINX_IMAGE}
 COPY .ema/nginx-spa.conf /etc/nginx/conf.d/default.conf
 COPY --from=build /out /usr/share/nginx/html
 EXPOSE 80
@@ -65,7 +66,7 @@ CMD ["sh", "-c", ${JSON.stringify(bc.startCommand || 'npm start')}]
 function staticSite(bc: BuildConfig): string {
   const root = bc.docRoot ? bc.docRoot.replace(/^\/+|\/+$/g, '') + '/' : '.';
   return `${header('static')}
-FROM nginx:1.27-alpine
+FROM ${NGINX_IMAGE}
 COPY .ema/nginx-static.conf /etc/nginx/conf.d/default.conf
 COPY ${root} /usr/share/nginx/html
 RUN rm -rf /usr/share/nginx/html/.ema /usr/share/nginx/html/Dockerfile
@@ -154,7 +155,7 @@ CMD ["java", "-XX:MaxRAMPercentage=75", "-jar", "/app/app.jar"]
 }
 
 function dotnet(bc: BuildConfig, port: number): string {
-  const v = bc.dotnetVersion || '8.0';
+  const v = bc.dotnetVersion || `${DOTNET_DEFAULT}.0`;
   const proj = bc.dotnetProject || 'App.csproj';
   return `${header('dotnet')}
 FROM mcr.microsoft.com/dotnet/sdk:${v} AS build
@@ -175,14 +176,14 @@ ENTRYPOINT ["dotnet", "${bc.entry || path.basename(proj, '.csproj') + '.dll'}"]
 
 function go(bc: BuildConfig, port: number): string {
   return `${header('go')}
-FROM golang:${bc.goVersion || '1.22'}-alpine AS build
+FROM golang:${bc.goVersion || GO_DEFAULT}-alpine AS build
 WORKDIR /src
 COPY go.* ./
 RUN go mod download
 COPY . .
 RUN CGO_ENABLED=0 go build -ldflags="-s -w" -o /out/app .
 
-FROM alpine:3.20
+FROM ${ALPINE_IMAGE}
 RUN apk add --no-cache ca-certificates tzdata
 WORKDIR /app
 COPY --from=build /out/app /app/app
@@ -195,7 +196,7 @@ CMD ["/app/app"]
 function generic(port: number): string {
   return `${header('unknown')}
 # No se detectó la tecnología. Complete este Dockerfile según su aplicación.
-FROM alpine:3.20
+FROM ${ALPINE_IMAGE}
 WORKDIR /app
 COPY . .
 EXPOSE ${port}

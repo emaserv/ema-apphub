@@ -6,6 +6,7 @@ import path from 'path';
 import { generateDockerfile, writeSupportFiles } from '../src/services/templates';
 import { TECHNOLOGIES } from '../src/services/detector';
 import { NODE_DEFAULT } from '../src/services/nodeVersion';
+import { ALPINE_IMAGE, DOTNET_DEFAULT, GO_DEFAULT, NGINX_IMAGE, resolveGoVersion } from '../src/services/imageVersions';
 
 /** Puerto "raro" para comprobar que la plantilla usa el puerto recibido y no uno fijo. */
 const PORT = 5123;
@@ -42,6 +43,40 @@ describe('invariantes de todas las plantillas', () => {
       }
     });
   }
+});
+
+describe('imágenes base vigentes', () => {
+  /** Todas las líneas FROM de todas las plantillas, con valores por defecto. */
+  const allFroms = Object.keys(TECHNOLOGIES).flatMap((t) =>
+    generateDockerfile(t, {}, PORT).split('\n').filter((l) => l.startsWith('FROM ')));
+
+  test('nginx y Alpine usan las versiones centralizadas', () => {
+    assert.ok(allFroms.includes(`FROM ${NGINX_IMAGE}`));
+    assert.ok(allFroms.includes(`FROM ${ALPINE_IMAGE}`));
+    for (const f of allFroms) {
+      if (/^FROM (nginx|alpine):/.test(f)) assert.match(f, new RegExp(`^FROM (${NGINX_IMAGE}|${ALPINE_IMAGE})$`), f);
+    }
+  });
+
+  test('ninguna plantilla usa versiones sin soporte conocidas', () => {
+    const EOL = [/nginx:1\.(2\d|1\d)\b/, /alpine:3\.(1\d|20|21)\b/, /dotnet\/(sdk|aspnet):[89]\.0/, /golang:1\.(1\d|2[0-5])\b/, /node:(1\d|20|21|23)\b/];
+    for (const f of allFroms) for (const re of EOL) assert.doesNotMatch(f, re, f);
+  });
+
+  test('.NET y Go por defecto', () => {
+    assert.match(generateDockerfile('dotnet', {}, PORT), new RegExp(`^FROM mcr\\.microsoft\\.com/dotnet/sdk:${DOTNET_DEFAULT}\\.0 AS build$`, 'm'));
+    assert.match(generateDockerfile('dotnet', {}, PORT), new RegExp(`^FROM mcr\\.microsoft\\.com/dotnet/aspnet:${DOTNET_DEFAULT}\\.0$`, 'm'));
+    assert.match(generateDockerfile('go', {}, PORT), new RegExp(`^FROM golang:${GO_DEFAULT}-alpine AS build$`, 'm'));
+  });
+});
+
+describe('resolveGoVersion', () => {
+  test('usa la más nueva entre go.mod y la vigente', () => {
+    assert.equal(resolveGoVersion(undefined), GO_DEFAULT);
+    assert.equal(resolveGoVersion('1.21'), GO_DEFAULT);
+    assert.equal(resolveGoVersion(GO_DEFAULT), GO_DEFAULT);
+    assert.equal(resolveGoVersion('1.99'), '1.99');
+  });
 });
 
 describe('Node.js (servidor)', () => {
