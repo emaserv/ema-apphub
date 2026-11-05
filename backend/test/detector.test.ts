@@ -4,6 +4,7 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import { detect, existingDockerfile, exposedPort } from '../src/services/detector';
+import { DOTNET_DEFAULT, GO_DEFAULT } from '../src/services/imageVersions';
 
 // ── Proyectos de prueba: cada test arma una carpeta temporal con los archivos que necesita ──
 const created: string[] = [];
@@ -259,6 +260,22 @@ describe('.NET', () => {
     assert.equal(d.buildConfig.entry, 'Api.dll');
   });
 
+  test('versión sin soporte: se respeta pero avisa', () => {
+    const d = detect(project({ 'Api.csproj': '<TargetFramework>net8.0</TargetFramework>' }));
+    assert.equal(d.buildConfig.dotnetVersion, '8.0');
+    assert.ok(d.warnings.some((w) => w.includes('.NET 8.0') && w.includes(`net${DOTNET_DEFAULT}.0`)));
+  });
+
+  test('versión con soporte: sin advertencia', () => {
+    const d = detect(project({ 'Api.csproj': `<TargetFramework>net${DOTNET_DEFAULT}.0</TargetFramework>` }));
+    assert.equal(d.buildConfig.dotnetVersion, `${DOTNET_DEFAULT}.0`);
+    assert.deepEqual(d.warnings, []);
+  });
+
+  test('sin TargetFramework reconocible usa la vigente', () => {
+    assert.equal(detect(project({ 'Api.csproj': '<Project/>' })).buildConfig.dotnetVersion, `${DOTNET_DEFAULT}.0`);
+  });
+
   test('varios .csproj: avisa cuál usará', () => {
     const d = detect(project({ 'A.csproj': '<TargetFramework>net8.0</TargetFramework>', 'tests/B.csproj': '' }));
     assert.ok(d.warnings.some((w) => w.includes('2 proyectos')));
@@ -266,10 +283,19 @@ describe('.NET', () => {
 });
 
 describe('Go', () => {
-  test('toma la versión de go.mod', () => {
+  test('go.mod con una versión vieja compila con la vigente (go.mod indica la mínima)', () => {
     const d = detect(project({ 'go.mod': 'module ema/api\n\ngo 1.23.4\n' }));
     assert.equal(d.technology, 'go');
-    assert.equal(d.buildConfig.goVersion, '1.23');
+    assert.equal(d.buildConfig.goVersion, GO_DEFAULT);
+  });
+
+  test('go.mod que exige una versión más nueva que la vigente se respeta', () => {
+    const next = `1.${Number(GO_DEFAULT.split('.')[1]) + 1}`;
+    assert.equal(detect(project({ 'go.mod': `module x\n\ngo ${next}\n` })).buildConfig.goVersion, next);
+  });
+
+  test('go.mod sin directiva go usa la vigente', () => {
+    assert.equal(detect(project({ 'go.mod': 'module x\n' })).buildConfig.goVersion, GO_DEFAULT);
   });
 });
 

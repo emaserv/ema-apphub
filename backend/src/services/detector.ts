@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { resolveNodeVersion } from './nodeVersion';
+import { DOTNET_DEFAULT, DOTNET_SUPPORTED, resolveGoVersion } from './imageVersions';
 
 export interface BuildConfig {
   packageManager?: 'npm' | 'yarn' | 'pnpm';
@@ -197,15 +198,18 @@ export function detect(root: string): Detection {
   if (csproj.length) {
     const proj = csproj[0];
     const txt = read(root, proj);
-    const tf = txt.match(/<TargetFramework>net(\d+)\.\d+<\/TargetFramework>/)?.[1] || '8';
+    const tf = txt.match(/<TargetFramework>net(\d+)\.\d+<\/TargetFramework>/)?.[1] || DOTNET_DEFAULT;
     const name = path.basename(proj, '.csproj');
+    if (!DOTNET_SUPPORTED.includes(tf)) {
+      warnings.push(`El proyecto usa .NET ${tf}.0, que no tiene soporte de Microsoft. Conviene actualizar <TargetFramework> a net${DOTNET_DEFAULT}.0.`);
+    }
     if (csproj.length > 1) warnings.push(`Se encontraron ${csproj.length} proyectos .csproj; se usará ${proj}.`);
     return base('dotnet', 'alta', { dotnetVersion: `${tf}.0`, dotnetProject: proj, entry: `${name}.dll` });
   }
 
   // ── Go
   if (exists(root, 'go.mod')) {
-    const v = read(root, 'go.mod').match(/^go\s+(\d+\.\d+)/m)?.[1] || '1.22';
+    const v = resolveGoVersion(read(root, 'go.mod').match(/^go\s+(\d+\.\d+)/m)?.[1]);
     return base('go', 'alta', { goVersion: v });
   }
 
