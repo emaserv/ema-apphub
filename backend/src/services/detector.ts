@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import { resolveNodeVersion } from './nodeVersion';
 
 export interface BuildConfig {
   packageManager?: 'npm' | 'yarn' | 'pnpm';
@@ -108,7 +109,8 @@ export function detect(root: string): Detection {
     const scripts = pkg.scripts || {};
     const pm: BuildConfig['packageManager'] = exists(root, 'pnpm-lock.yaml') ? 'pnpm' : exists(root, 'yarn.lock') ? 'yarn' : 'npm';
     const run = (s: string) => (pm === 'npm' ? `npm run ${s}` : `${pm} ${s}`);
-    const nodeVersion = String(pkg.engines?.node || '').match(/(\d{2})/)?.[1] || '20';
+    const { version: nodeVersion, warning: nodeWarning } = resolveNodeVersion(pkg.engines?.node);
+    if (nodeWarning) warnings.push(nodeWarning);
     const common: BuildConfig = { packageManager: pm, nodeVersion, testCommand: scripts.test && !/no test specified/.test(scripts.test) ? run('test') : undefined };
     if (!exists(root, 'package-lock.json') && pm === 'npm') warnings.push('No hay package-lock.json: se usará "npm install" (builds menos reproducibles).');
 
