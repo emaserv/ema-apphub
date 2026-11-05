@@ -58,6 +58,37 @@ export function safeJoin(base: string, rel: string): string {
 
 export const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+/**
+ * Interpreta un valor de .env igual que Docker Compose, para que importar lo que se exportó con
+ * toDotenvLine devuelva exactamente el valor original:
+ *  - "entre comillas dobles": \" \\ \n se desescapan y $$ → $
+ *  - 'entre comillas simples': literal
+ *  - sin comillas: "#" al inicio o precedido de espacio inicia un comentario, y $$ → $
+ */
+function parseDotenvValue(raw: string): string {
+  if (raw.startsWith('"')) {
+    let out = '';
+    for (let i = 1; i < raw.length; i++) {
+      const c = raw[i];
+      if (c === '"') return out; // lo que siga a la comilla de cierre es un comentario
+      if (c === '\\' && i + 1 < raw.length) {
+        const n = raw[++i];
+        out += n === 'n' ? '\n' : n === '"' || n === '\\' ? n : '\\' + n;
+      } else if (c === '$' && raw[i + 1] === '$') {
+        out += '$';
+        i++;
+      } else out += c;
+    }
+    return raw; // sin comilla de cierre: se toma tal cual
+  }
+  if (raw.startsWith("'")) {
+    const end = raw.indexOf("'", 1);
+    return end === -1 ? raw : raw.slice(1, end);
+  }
+  if (raw.startsWith('#')) return ''; // "CLAVE=  # comentario" (así se exportan los secretos)
+  return raw.replace(/\s+#.*$/, '').trimEnd().replace(/\$\$/g, '$');
+}
+
 export function parseDotenv(text: string): { key: string; value: string }[] {
   const out: { key: string; value: string }[] = [];
   for (const raw of text.split(/\r?\n/)) {
@@ -65,10 +96,7 @@ export function parseDotenv(text: string): { key: string; value: string }[] {
     if (!line || line.startsWith('#')) continue;
     const m = line.replace(/^export\s+/, '').match(/^([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/);
     if (!m) continue;
-    let v = m[2];
-    if ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'"))) v = v.slice(1, -1);
-    else v = v.replace(/\s+#.*$/, '');
-    out.push({ key: m[1], value: v.replace(/\\n/g, '\n') });
+    out.push({ key: m[1], value: parseDotenvValue(m[2]) });
   }
   return out;
 }
