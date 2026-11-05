@@ -71,15 +71,42 @@ async function setEnvStatus(envId: string, status: string, extra: Record<string,
   await q(`UPDATE application_environments SET ${sets.join(', ')} WHERE id=$1`, vals);
 }
 
+export type ImagePlan = 'reuse' | 'pull' | 'build' | 'missing';
+
+/**
+ * Decide cómo obtener la imagen de una versión. El código fuente solo hace falta para construirla:
+ * si la imagen ya existe (p. ej. en un rollback) se reutiliza aunque el código ya no esté en disco.
+ */
+export function planImage(o: { imageExists: boolean; sourceExists: boolean; forceRebuild?: boolean; dirty: boolean; pushedToRegistry: boolean }): ImagePlan {
+  if (o.imageExists && !o.forceRebuild && !o.dirty) return 'reuse';
+  if (!o.imageExists && !o.dirty && o.pushedToRegistry) return 'pull';
+  return o.sourceExists ? 'build' : 'missing';
+}
+
 /** Prepara archivos, construye (o reutiliza) la imagen y levanta el ambiente. */
 async function deployVersion(app: AppRow, env: EnvRow, version: VersionRow, log: DeployLog, opts: { forceRebuild?: boolean }) {
   const image = imageTag(app.slug, version.version);
   const container = envProject(app, env);
 
   await log.step('prepare', `Preparando ${app.name} ${version.version} → ${env.name}`);
-  if (!fs.existsSync(version.source_path)) throw new Error(`No existe el código de la versión en ${version.source_path}`);
-  writeSupportFiles(version.source_path);
-  fs.writeFileSync(path.join(version.source_path, 'Dockerfile'), version.dockerfile);
+  const reg = await registryTag(app, version.version);
+  const sourceExists = fs.existsSync(version.source_path);
+  const plan = planImage({
+    imageExists: await dk.imageExists(image),
+    sourceExists,
+    forceRebuild: opts.forceRebuild,
+    dirty: !!version.build_config?.dirty,
+    pushedToRegistry: !!reg && !!(await one(`SELECT 1 FROM docker_images WHERE version_id=$1 AND pushed`, [version.id])),
+  });
+  if (plan === 'missing') {
+    throw new Error(`No existe el código de la versión en ${version.source_path} ni una imagen para reutilizar: vuelva a subir el código de esta versión.`);
+  }
+  if (sourceExists) {
+    writeSupportFiles(version.source_path);
+    fs.writeFileSync(path.join(version.source_path, 'Dockerfile'), version.dockerfile);
+  } else {
+    log.line('El código de esta versión ya no está en disco: se usará la imagen existente.');
+  }
   const dir = await writeEnvFiles(app, env, image);
   log.line(`Archivos generados en ${dir}`);
 
@@ -92,12 +119,9 @@ async function deployVersion(app: AppRow, env: EnvRow, version: VersionRow, log:
   log.line('docker-compose.yml válido');
 
   await log.step('build', `Imagen ${image}`);
-  const reg = await registryTag(app, version.version);
-  const exists = await dk.imageExists(image);
-  const dirty = !!version.build_config?.dirty;
-  if (exists && !opts.forceRebuild && !dirty) {
+  if (plan === 'reuse') {
     log.line('La imagen ya existe: se reutiliza (sin recompilar)');
-  } else if (!exists && !dirty && reg && (await one(`SELECT 1 FROM docker_images WHERE version_id=$1 AND pushed`, [version.id]))) {
+  } else if (plan === 'pull' && reg) {
     log.line(`Descargando ${reg.tag} desde el registry`);
     await dk.pullImage(reg.tag, (l) => log.line(l));
     await dk.tagAndPush(reg.tag, image, () => undefined).catch(() => undefined);
@@ -109,7 +133,7 @@ async function deployVersion(app: AppRow, env: EnvRow, version: VersionRow, log:
        ON CONFLICT (version_id, tag) DO UPDATE SET image_id=EXCLUDED.image_id, size_bytes=EXCLUDED.size_bytes, created_at=now()`,
       [app.id, version.id, image, info?.id ?? null, info?.size ?? null],
     );
-    if (dirty) await q(`UPDATE application_versions SET build_config = build_config - 'dirty' WHERE id=$1`, [version.id]);
+    if (version.build_config?.dirty) await q(`UPDATE application_versions SET build_config = build_config - 'dirty' WHERE id=$1`, [version.id]);
     log.line('Imagen construida');
   }
 
