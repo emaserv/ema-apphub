@@ -1,0 +1,61 @@
+# CI de EMA AppHub: en cada PR a master (y en cada push a master) verifica que
+# backend y frontend compilen, pasen el chequeo de tipos y los tests.
+name: CI
+
+on:
+  pull_request:
+    branches: [master]
+    paths: ['backend/**', 'frontend/**', '.github/workflows/**']
+  push:
+    branches: [master]
+    paths: ['backend/**', 'frontend/**', '.github/workflows/**']
+
+# Si se sube un commit nuevo mientras el CI corre, cancela la corrida anterior (ahorra minutos)
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  # Misma versión que usan backend/Dockerfile y frontend/Dockerfile: cambiarlas juntas
+  NODE_VERSION: '20'
+
+jobs:
+  backend:
+    name: Backend (tipos, tests, build)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+
+  frontend:
+    name: Frontend (tipos, build)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      # "build" ya incluye "tsc --noEmit" (chequeo de tipos) antes de "vite build"
+      - run: npm run build
