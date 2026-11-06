@@ -1,0 +1,50 @@
+# Dependabot: revisa una vez por mes si hay versiones nuevas de las librerías y abre PRs con la actualización.
+# Cada PR corre el CI (tests incluidos): si queda en verde, la actualización no rompió nada conocido.
+#
+# Para gastar pocos minutos de CI, las actualizaciones se agrupan: como máximo 2 PRs por carpeta y por mes,
+#   - "menores": correcciones y mejoras compatibles (minor y patch): normalmente se pueden mergear directo.
+#   - "mayores": cambios de versión principal (major): pueden requerir ajustar el código; revisarlas con calma.
+#
+# No se incluyen las imágenes Docker (node, nginx, postgres, traefik): sus versiones se actualizan a mano y
+# a propósito (ver backend/src/services/imageVersions.ts), porque un salto como postgres 16 → 17 exige migrar datos.
+#
+# Las alertas de seguridad son aparte: se activan en Settings → Advanced Security → Dependabot alerts.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /backend
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 2
+    commit-message:
+      prefix: "deps(backend)"
+    groups:
+      menores:
+        update-types: [minor, patch]
+      mayores:
+        update-types: [major]
+
+  - package-ecosystem: npm
+    directory: /frontend
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 2
+    commit-message:
+      prefix: "deps(frontend)"
+    groups:
+      menores:
+        update-types: [minor, patch]
+      mayores:
+        update-types: [major]
+
+  # Acciones que usa el CI (actions/checkout, actions/setup-node)
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 1
+    commit-message:
+      prefix: "deps(ci)"
+    groups:
+      acciones:
+        patterns: ["*"]
