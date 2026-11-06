@@ -14,7 +14,7 @@
     "test:api": "tsx --test --test-concurrency=1 test/api/*.test.ts"
   },
   "dependencies": {
-    "adm-zip": "^0.5.16",
+    "adm-zip": "^0.6.1",
     "bcryptjs": "^2.4.3",
     "cookie": "^0.7.2",
     "cookie-parser": "^1.4.7",
@@ -28,12 +28,12 @@
     "node-cron": "^3.0.3",
     "pg": "^8.13.1",
     "swagger-ui-express": "^5.0.1",
-    "ws": "^8.18.0",
+    "ws": "^8.22.1",
     "yaml": "^2.6.1",
     "zod": "^3.23.8"
   },
   "devDependencies": {
-    "@types/adm-zip": "^0.5.6",
+    "@types/adm-zip": "^0.6.0",
     "@types/bcryptjs": "^2.4.6",
     "@types/cookie": "^0.6.0",
     "@types/cookie-parser": "^1.4.7",
