@@ -1,0 +1,11 @@
+{
+  // Configuración de TypeScript para los tests: el tsconfig del backend sólo incluye src/ (lo que se compila
+  // a dist/), así que sin este archivo VS Code no reconoce los tipos de Node en test/ y marca errores falsos.
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "rootDir": "..",
+    "noEmit": true,
+    "types": ["node"]
+  },
+  "include": ["./**/*.ts", "../src/**/*.ts"]
+}

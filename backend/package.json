@@ -9,8 +9,9 @@
     "build": "tsc -p tsconfig.json",
     "start": "node dist/index.js",
     "migrate": "node dist/db/migrate.js",
-    "typecheck": "tsc --noEmit",
-    "test": "tsx --test test/*.test.ts"
+    "typecheck": "tsc --noEmit && tsc -p test",
+    "test": "tsx --test test/*.test.ts",
+    "test:api": "tsx --test --test-concurrency=1 test/api/*.test.ts"
   },
   "dependencies": {
     "adm-zip": "^0.5.16",
