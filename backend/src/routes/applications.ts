@@ -222,9 +222,11 @@ r.delete('/applications/:id', requirePerm('apps.delete'), ah(async (req, res) =>
   const purge = boolish(req.query.purge);
   const envs = await q(`SELECT * FROM application_environments WHERE application_id=$1`, [app.id]);
   for (const e of envs) await teardown(app, e, purge);
+  // Se audita ANTES de borrar: audit_logs.application_id apunta a applications y, con la app ya borrada,
+  // el registro se rechazaba (la FK pone application_id en NULL al borrar; el nombre queda en application_name).
+  await audit(req, { action: 'app_delete', entityType: 'application', entityId: app.id, app, details: { purge } });
   await q(`DELETE FROM applications WHERE id=$1`, [app.id]);
   if (purge) rmrf(paths.app(app.slug));
-  await audit(req, { action: 'app_delete', entityType: 'application', entityId: app.id, app, details: { purge } });
   res.json({ ok: true });
 }));
 

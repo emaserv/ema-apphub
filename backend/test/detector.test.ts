@@ -210,7 +210,7 @@ describe('Python', () => {
 
 describe('PHP', () => {
   test('Laravel por composer.json o por artisan', () => {
-    for (const files of [{ 'composer.json': { require: { 'laravel/framework': '^11' } } }, { 'composer.json': {}, artisan: '' }]) {
+    for (const files of [{ 'composer.json': { require: { 'laravel/framework': '^11' } } }, { 'composer.json': {}, artisan: '' }] as Record<string, string | object>[]) {
       const d = detect(project(files));
       assert.equal(d.technology, 'php-laravel');
       assert.equal(d.buildConfig.docRoot, 'public');
@@ -349,7 +349,7 @@ describe('Sitio estático', () => {
 
 describe('sin tecnología reconocible', () => {
   test('carpeta vacía o con archivos desconocidos', () => {
-    for (const files of [{}, { 'LEEME.txt': 'hola' }]) {
+    for (const files of [{}, { 'LEEME.txt': 'hola' }] as Record<string, string | object>[]) {
       const d = detect(project(files));
       assert.equal(d.technology, 'unknown');
       assert.equal(d.confidence, 'baja');
