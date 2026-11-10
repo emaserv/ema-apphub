@@ -84,6 +84,18 @@ function exposePort(dockerfile: string): number | null {
   return m ? Number(m[1]) : null;
 }
 
+/**
+ * Versión de Java de un pom.xml. Acepta el formato viejo "1.8" (= Java 8) además de "8", "17", etc.
+ * Busca en las propiedades habituales, en orden; si no hay ninguna con un número, usa 21.
+ */
+export function pomJavaVersion(pom: string): string {
+  for (const tag of ['java.version', 'maven.compiler.release', 'maven.compiler.source', 'maven.compiler.target']) {
+    const m = pom.match(new RegExp(`<${tag.replace(/\./g, '\\.')}>\\s*(?:1\\.)?(\\d+)\\s*</`));
+    if (m) return m[1];
+  }
+  return '21';
+}
+
 export function detect(root: string): Detection {
   const markers: string[] = [];
   const warnings: string[] = [];
@@ -187,8 +199,7 @@ export function detect(root: string): Detection {
 
   // ── Java
   if (exists(root, 'pom.xml')) {
-    const v = read(root, 'pom.xml').match(/<(?:java\.version|maven\.compiler\.release)>(\d+)</)?.[1] || '21';
-    return base('java-maven', 'alta', { javaVersion: v, buildCommand: 'mvn -B -DskipTests package', testCommand: 'mvn -B test' });
+    return base('java-maven', 'alta', { javaVersion: pomJavaVersion(read(root, 'pom.xml')), buildCommand: 'mvn -B -DskipTests package', testCommand: 'mvn -B test' });
   }
   if (exists(root, 'build.gradle') || exists(root, 'build.gradle.kts')) {
     return base('java-gradle', 'alta', { javaVersion: '21', buildCommand: 'gradle bootJar --no-daemon || gradle build -x test --no-daemon' });
