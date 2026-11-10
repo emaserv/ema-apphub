@@ -264,7 +264,9 @@ r.post('/applications/:id/env/import', requirePerm('apps.edit'), ah(async (req, 
     imported++;
   }
   await audit(req, { action: 'env_import', entityType: 'environment', entityId: env.id, app, details: { environment: env.name, imported } });
-  res.json({ imported, total: parsed.length });
+  // Igual que PUT /env: regenerar el .env de la app desplegada (los cambios aplican al reiniciar)
+  if (imported && env.deployed_version_id) await writeEnvFiles(app, env, (await currentImageFor(app, env))!);
+  res.json({ imported, total: parsed.length, restartRequired: !!imported && !!env.deployed_version_id });
 }));
 
 // ───────── Git ─────────

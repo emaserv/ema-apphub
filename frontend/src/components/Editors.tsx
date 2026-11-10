@@ -3,7 +3,39 @@ import { Eye, EyeOff, Lock, Plus, Trash2, Upload } from 'lucide-react';
 import { Modal } from './ui';
 
 export interface VarRow { key: string; value: string; isSecret: boolean; isSystem?: boolean; masked?: boolean }
-const SECRET_RE = /(PASS|PASSWORD|SECRET|TOKEN|KEY|PRIVATE|CREDENTIAL)/i;
+// Mantener igual que SECRET_KEY_RE en backend/src/lib/util.ts
+const SECRET_RE = /(PASS|PASSWORD|SECRET|TOKEN|KEY|PRIVATE|CREDENTIAL|DATABASE_URL)/i;
+
+/**
+ * Interpreta un valor de .env igual que el backend (parseDotenvValue en backend/src/lib/util.ts)
+ * y que Docker Compose, para que importar un archivo exportado devuelva los valores originales:
+ *  - "entre comillas dobles": \" \\ \n se desescapan y $$ → $
+ *  - 'entre comillas simples': literal
+ *  - sin comillas: "#" al inicio o precedido de espacio inicia un comentario, y $$ → $
+ */
+function parseDotenvValue(raw: string): string {
+  if (raw.startsWith('"')) {
+    let out = '';
+    for (let i = 1; i < raw.length; i++) {
+      const c = raw[i];
+      if (c === '"') return out; // lo que siga a la comilla de cierre es un comentario
+      if (c === '\\' && i + 1 < raw.length) {
+        const n = raw[++i];
+        out += n === 'n' ? '\n' : n === '"' || n === '\\' ? n : '\\' + n;
+      } else if (c === '$' && raw[i + 1] === '$') {
+        out += '$';
+        i++;
+      } else out += c;
+    }
+    return raw; // sin comilla de cierre: se toma tal cual
+  }
+  if (raw.startsWith("'")) {
+    const end = raw.indexOf("'", 1);
+    return end === -1 ? raw : raw.slice(1, end);
+  }
+  if (raw.startsWith('#')) return ''; // "CLAVE=  # secreto" (así se exportan los secretos)
+  return raw.replace(/\s+#.*$/, '').trimEnd().replace(/\$\$/g, '$');
+}
 
 export function parseDotenv(text: string): VarRow[] {
   const out: VarRow[] = [];
@@ -12,12 +44,25 @@ export function parseDotenv(text: string): VarRow[] {
     if (!line || line.startsWith('#')) continue;
     const m = line.replace(/^export\s+/, '').match(/^([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/);
     if (!m) continue;
-    let v = m[2];
-    if ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'"))) v = v.slice(1, -1);
-    else v = v.replace(/\s+#.*$/, '');
-    out.push({ key: m[1], value: v, isSecret: SECRET_RE.test(m[1]) });
+    out.push({ key: m[1], value: parseDotenvValue(m[2]), isSecret: SECRET_RE.test(m[1]) });
   }
   return out;
+}
+
+/**
+ * Combina lo importado con las filas actuales. Las de sistema no se tocan, y una secreta que ya
+ * existe no se pisa con un valor vacío (el export deja los secretos vacíos), así al Guardar
+ * se conserva el valor real.
+ */
+export function mergeImported(rows: VarRow[], parsed: VarRow[]): VarRow[] {
+  const map = new Map(rows.map((r) => [r.key, r]));
+  for (const p of parsed) {
+    const cur = map.get(p.key);
+    if (cur?.isSystem) continue;
+    if (!p.value && cur?.isSecret) continue;
+    map.set(p.key, { ...p, isSecret: p.isSecret || !!cur?.isSecret });
+  }
+  return [...map.values()];
 }
 
 /** Editor de variables de entorno: crear, editar, eliminar, ocultar, importar .env. */
@@ -71,10 +116,7 @@ export function VarsEditor({ rows, onChange, readOnly }: { rows: VarRow[]; onCha
         <Modal title="Importar variables (.env)" onClose={() => setImporting(false)} footer={<>
           <button className="btn outline" onClick={() => setImporting(false)}>Cancelar</button>
           <button className="btn primary" onClick={() => {
-            const parsed = parseDotenv(text);
-            const map = new Map(rows.map((r) => [r.key, r]));
-            for (const p of parsed) { const cur = map.get(p.key); if (cur?.isSystem) continue; map.set(p.key, { ...p, isSecret: p.isSecret || !!cur?.isSecret }); }
-            onChange([...map.values()]); setImporting(false); setText('');
+            onChange(mergeImported(rows, parseDotenv(text))); setImporting(false); setText('');
           }}>Importar</button></>}>
           <div className="stack">
             <p className="muted" style={{ margin: 0 }}>Pegue el contenido de un archivo <code>.env</code> o selecciónelo. Las claves con PASSWORD, SECRET, TOKEN o KEY se marcan como secretas.</p>

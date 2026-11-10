@@ -98,4 +98,16 @@ describe('variables secretas', () => {
     const { decrypt } = await import('../../src/lib/crypto');
     assert.equal(decrypt(antes.value_enc), 'superSecreta123');
   });
+
+  test('importar el propio export conserva la secreta y actualiza el resto', async () => {
+    const exp = (await api('GET', `/applications/${id}/env/export`, { session: s })).body as string;
+    const r = await api('POST', `/applications/${id}/env/import`, { session: s,
+      body: { content: exp.replace('LOG_LEVEL=info', 'LOG_LEVEL=debug') } });
+    assert.equal(r.status, 200, JSON.stringify(r.body));
+    assert.equal(r.body.imported, 1, 'sólo LOG_LEVEL; la secreta vacía se saltea');
+    assert.equal(r.body.restartRequired, false, 'no está desplegada');
+    const { decrypt } = await import('../../src/lib/crypto');
+    assert.equal(decrypt((await one(`SELECT value_enc FROM environment_variables WHERE key = 'DB_PASSWORD'`)).value_enc), 'superSecreta123');
+    assert.equal((await one(`SELECT value FROM environment_variables WHERE key = 'LOG_LEVEL'`)).value, 'debug');
+  });
 });
