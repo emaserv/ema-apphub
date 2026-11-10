@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
-import { detect, existingDockerfile, exposedPort } from '../src/services/detector';
+import { detect, pomJavaVersion, existingDockerfile, exposedPort } from '../src/services/detector';
 import { DOTNET_DEFAULT, GO_DEFAULT } from '../src/services/imageVersions';
 
 // ── Proyectos de prueba: cada test arma una carpeta temporal con los archivos que necesita ──
@@ -243,6 +243,14 @@ describe('Java', () => {
   test('Maven: también maven.compiler.release, y 21 por defecto', () => {
     assert.equal(detect(project({ 'pom.xml': '<maven.compiler.release>11</maven.compiler.release>' })).buildConfig.javaVersion, '11');
     assert.equal(detect(project({ 'pom.xml': '<project/>' })).buildConfig.javaVersion, '21');
+  });
+
+  test('Maven: formato viejo 1.8 = Java 8, y maven.compiler.source/target', () => {
+    assert.equal(pomJavaVersion('<java.version>1.8</java.version>'), '8');
+    assert.equal(pomJavaVersion('<maven.compiler.source>1.8</maven.compiler.source><maven.compiler.target>1.8</maven.compiler.target>'), '8');
+    assert.equal(pomJavaVersion('<maven.compiler.target>11</maven.compiler.target>'), '11');
+    // Si una propiedad referencia a otra (${...}), sigue buscando en las demás
+    assert.equal(pomJavaVersion('<maven.compiler.release>${jdk}</maven.compiler.release><maven.compiler.source>17</maven.compiler.source>'), '17');
   });
 
   test('Gradle (Groovy y Kotlin)', () => {
