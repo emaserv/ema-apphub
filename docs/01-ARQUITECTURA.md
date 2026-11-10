@@ -196,7 +196,7 @@ REST bajo `/api`, JSON, documentada con OpenAPI 3 en `/api/docs`. Las acciones s
 | Auditoría | Toda acción de escritura registra usuario, IP, app, acción, resultado |
 | Transporte | Traefik con Let's Encrypt y redirección HTTP→HTTPS; CORS configurable por `CORS_ORIGINS` |
 
-Endurecimiento recomendado para producción: poner el socket detrás de un `docker-socket-proxy`, backups de `/data` fuera del servidor y rotar `MASTER_KEY` sólo con el script de recifrado (ver README).
+Endurecimiento recomendado para producción: poner el socket detrás de un `docker-socket-proxy`, backups de `/data` fuera del servidor y guardar `MASTER_KEY` fuera del servidor. La clave no se rota: AppHub la verifica al arrancar y no inicia si no coincide con la que cifró los datos (ver README, sección MASTER_KEY).
 
 ## 8. Escalabilidad futura
 

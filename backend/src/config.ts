@@ -15,6 +15,8 @@ export const config = {
   jwtSecret: req('JWT_SECRET', process.env.NODE_ENV === 'production' ? undefined : 'dev-jwt-secret-change-me'),
   jwtExpiresHours: int(process.env.JWT_EXPIRES_HOURS, 8),
   masterKey: req('MASTER_KEY', process.env.NODE_ENV === 'production' ? undefined : 'dev-master-key-change-me'),
+  /** Sólo si la MASTER_KEY original se perdió: acepta la nueva aunque no pueda leer los secretos guardados. */
+  masterKeyAcceptNew: bool(process.env.MASTER_KEY_ACCEPT_NEW, false),
   cookieSecure: bool(process.env.COOKIE_SECURE, false),
   corsOrigins: (process.env.CORS_ORIGINS || '').split(',').map((s) => s.trim()).filter(Boolean),
   trustProxy: int(process.env.TRUST_PROXY, 1),

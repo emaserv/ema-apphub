@@ -85,6 +85,11 @@ O con el instalador, que genera secretos aleatorios, crea `DATA_DIR`, descarga e
 sudo ./scripts/install.sh
 ```
 
+> **Importante: guarde la `MASTER_KEY` antes de cargar datos.** Apenas instalado, copie la `MASTER_KEY` del `.env` del servidor
+> (la generada por `install.sh`, o con `openssl rand -hex 32` si instaló a mano) y guárdela en el gestor de contraseñas de la empresa,
+> con acceso para al menos dos personas. Recién después cargue aplicaciones, variables y bases. Sin esa clave los secretos no se
+> pueden recuperar, y no debe cambiarse después de instalar (ver [MASTER_KEY](#master_key)).
+
 Acceso:
 
 * Sin dominio: `http://IP-DEL-SERVIDOR:8080`
@@ -157,6 +162,14 @@ Los backups de cada aplicación se gestionan desde la interfaz. Para respaldar *
 
 Copie los respaldos fuera del servidor. El `.env` contiene `MASTER_KEY`: guárdelo en un lugar seguro.
 
+### MASTER_KEY
+
+`MASTER_KEY` cifra todos los secretos que guarda AppHub: variables secretas, contraseñas de las bases, credenciales de Git y de registries. Por eso:
+
+* **Guarde una copia fuera del servidor y separada de los backups** (por ejemplo, en el gestor de contraseñas de la empresa). Un backup sin su clave no permite recuperar los secretos.
+* **No la cambie.** No hay rotación de clave: con otra clave, los secretos guardados no se pueden leer.
+* **AppHub verifica la clave al arrancar.** Si la del `.env` no es la que cifró los datos (por ejemplo, al reinstalar con un `.env` nuevo), el backend **no arranca** y lo explica en su log (`docker compose logs backend`). Así se evita mezclar secretos cifrados con dos claves distintas.
+
 ## Actualización
 
 ```bash
@@ -172,7 +185,7 @@ Copie los respaldos fuera del servidor. El `.env` contiene `MASTER_KEY`: guárde
 | Base de una app dañada | *Backups → Restaurar* el `.dump` deseado. |
 | Reinicio del servidor | Todos los contenedores vuelven solos. Deploys interrumpidos quedan marcados como fallidos. |
 | Servidor perdido | Nuevo servidor → instalar → `./scripts/restore-platform.sh <dump> <data.tar.gz>` con el `.env` original → *Deploy* de cada app (las imágenes se reconstruyen desde las versiones guardadas). |
-| Se perdió `MASTER_KEY` | Los secretos no pueden recuperarse: recargue variables secretas y rote contraseñas de bases. |
+| Se perdió `MASTER_KEY` | Los secretos no pueden recuperarse. Si el backend no arranca por la verificación de clave, agregue `MASTER_KEY_ACCEPT_NEW=true` al `.env` y `docker compose up -d`: arranca con la clave nueva. Luego recargue las variables secretas y las credenciales de Git/registries, rote las contraseñas de las bases y quite `MASTER_KEY_ACCEPT_NEW`. |
 
 ## Seguridad
 
