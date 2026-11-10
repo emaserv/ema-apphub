@@ -9,6 +9,7 @@ import { audit } from './audit';
 import { AppRow, EnvRow, envSnapshot, getApp, getVersion } from './core';
 import { ownerCredentials } from './database';
 import { enqueueDeploy } from './deploy';
+import { backupFailedNotice, notify } from './notify';
 import { createStaging, moveDir } from './storage';
 
 const stamp = () => new Date().toISOString().replace(/[-:]/g, '').replace('T', '-').slice(0, 15);
@@ -145,6 +146,7 @@ export async function runScheduled(scheduleId: string) {
     await audit(null, { action: 'backup_scheduled', entityType: 'backup', app, details: { type: s.type, environment: env.name } });
   } catch (e: any) {
     await audit(null, { action: 'backup_scheduled', entityType: 'backup', app, result: 'failure', details: { error: e.message } });
+    notify(backupFailedNotice({ app, env: env.name, type: s.type, error: String(e?.message || e) }));
   }
   await q(`UPDATE backup_schedules SET last_run_at=now() WHERE id=$1`, [s.id]);
   const old = await q(`SELECT id FROM backups WHERE environment_id=$1 AND type=$2 AND scheduled AND status='success'

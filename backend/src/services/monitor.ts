@@ -7,6 +7,7 @@ import { AppRow, EnvRow, envProject } from './core';
 import { runScheduled } from './backup';
 import { probe } from './deploy';
 import * as dk from './docker';
+import { healthNotice, healthTransition, notify } from './notify';
 import { cleanupTmp } from './storage';
 
 // ───────── health checks periódicos ─────────
@@ -33,9 +34,16 @@ async function healthRound() {
   const envs = await q(`SELECT e.*, row_to_json(a.*) AS app FROM application_environments e JOIN applications a ON a.id=e.application_id
                         WHERE e.deployed_version_id IS NOT NULL AND e.status IN ('running','error')`);
   for (const e of envs) {
-    try { await checkEnv(e.app, e); } catch (err) { console.error('[health]', (err as Error).message); }
+    try {
+      const r = await checkEnv(e.app, e);
+      // Sólo en la ronda automática (no en el chequeo manual): avisar si la app se cayó o se recuperó
+      const last = await q<{ status: string }>(`SELECT status FROM health_checks WHERE environment_id=$1 ORDER BY checked_at DESC LIMIT 3`, [e.id]);
+      const kind = healthTransition(last.map((h) => h.status));
+      if (kind) notify(healthNotice({ app: e.app, env: e.name, kind, detail: r.error }));
+    } catch (err) { console.error('[health]', (err as Error).message); }
   }
   await q(`DELETE FROM health_checks WHERE checked_at < now() - interval '7 days'`);
+  await q(`DELETE FROM notifications WHERE created_at < now() - interval '90 days'`);
 }
 
 // ───────── sincronización de estado de contenedores ─────────

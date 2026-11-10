@@ -6,6 +6,7 @@ import {
 import { api } from '../api/client';
 import { useAuth } from '../auth';
 import Logo from './Logo';
+import NotificationBell from './NotificationBell';
 
 export default function Layout() {
   const { me, can, logout } = useAuth();
@@ -56,6 +57,7 @@ export default function Layout() {
           <button className="btn ghost icon menu-btn" onClick={() => setOpen(!open)} aria-label="Menú"><Menu size={20} /></button>
           <div className="spacer" />
           {can('apps.create') && <button className="btn primary" onClick={() => nav('/aplicaciones/nueva')}><Plus size={16} />Nueva aplicación</button>}
+          {me?.role === 'superadmin' && <NotificationBell />}
           <div className="user">
             <div className="avatar">{me?.fullName?.[0] ?? '?'}</div>
             <div className="stack" style={{ gap: 0 }}>

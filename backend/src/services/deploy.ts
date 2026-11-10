@@ -9,6 +9,7 @@ import {
   AppRow, EnvRow, VersionRow, assertPortFree, envProject, getApp, getVersion, imageTag, registryTag, writeEnvFiles,
 } from './core';
 import * as dk from './docker';
+import { deployFailedNotice, notify } from './notify';
 import { writeSupportFiles } from './templates';
 
 type Trigger = 'manual' | 'git' | 'webhook' | 'rollback' | 'auto_rollback' | 'clone' | 'restore';
@@ -215,6 +216,7 @@ async function runDeployment(depId: string, r: DeployRequest) {
     await log.flush();
     await q(`UPDATE deployments SET error=$2 WHERE id=$1`, [depId, msg.slice(0, 4000)]);
     await audit(null, { action: 'deploy', entityType: 'deployment', entityId: depId, app, result: 'failure', details: { version: version.version, environment: env.name, error: msg.slice(0, 500) } }, user);
+    const failInfo = { app, env: env.name, version: version.version, error: msg, by: r.username || (r.trigger && r.trigger !== 'manual' ? r.trigger : undefined) };
 
     const canRollback = r.autoRollback !== false && previousId && previousId !== version.id;
     if (canRollback) {
@@ -228,6 +230,7 @@ async function runDeployment(depId: string, r: DeployRequest) {
         await log.close();
         await q(`UPDATE deployments SET status='rolled_back', finished_at=now() WHERE id=$1`, [depId]);
         await audit(null, { action: 'auto_rollback', entityType: 'deployment', entityId: depId, app, details: { to: prev.version, environment: env.name } }, user);
+        notify(deployFailedNotice({ ...failInfo, rolledBackTo: prev.version }));
         return;
       } catch (e2: any) {
         log.line(`✖ El rollback automático también falló: ${e2?.message || e2}`);
@@ -236,6 +239,7 @@ async function runDeployment(depId: string, r: DeployRequest) {
     await log.close();
     await setEnvStatus(r.envId, 'error', { health_status: 'unhealthy' });
     await q(`UPDATE deployments SET status='failed', finished_at=now() WHERE id=$1`, [depId]);
+    notify(deployFailedNotice(failInfo));
   }
 }
 

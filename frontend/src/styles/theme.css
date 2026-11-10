@@ -222,3 +222,24 @@ table.table { width: 100%; border-collapse: collapse; }
   .login-page { grid-template-columns: 1fr; }
   .login-hero { display: none; }
 }
+
+/* ───────── Avisos (campanita) ───────── */
+.notif { position: relative; }
+.notif-badge { position: absolute; top: 2px; right: 2px; min-width: 17px; height: 17px; padding: 0 4px; border-radius: 9px; background: var(--err); color: #fff; font-size: 10px; font-weight: 600; line-height: 17px; text-align: center; pointer-events: none; }
+.notif-panel { position: absolute; right: 0; top: calc(100% + 8px); width: 380px; max-width: calc(100vw - 32px); max-height: 70vh; display: flex; flex-direction: column; background: var(--ema-card); border: 1px solid var(--ema-border); border-radius: var(--radius); box-shadow: var(--shadow); z-index: 30; overflow: hidden; }
+.notif-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 12px 14px; border-bottom: 1px solid var(--ema-border); }
+.notif-empty { padding: 16px 14px; margin: 0; }
+.notif-list { list-style: none; margin: 0; padding: 0; overflow-y: auto; }
+.notif-list li { display: flex; gap: 10px; align-items: flex-start; padding: 10px 14px; border-bottom: 1px solid var(--ema-border); cursor: pointer; }
+.notif-list li:last-child { border-bottom: 0; }
+.notif-list li:hover { background: var(--ema-bg); }
+.notif-list li.unread { background: #eef6fc; }
+.notif-list li.unread:hover { background: #e3f0fa; }
+.notif-list li:not(.unread) .notif-title { font-weight: 500; }
+.notif-title { font-size: 13px; overflow-wrap: anywhere; }
+.notif-body { white-space: pre-line; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.notif-dot { flex: none; width: 9px; height: 9px; border-radius: 50%; margin-top: 5px; }
+.notif-dot.error { background: var(--err); }
+.notif-dot.warn { background: var(--warn); }
+.notif-dot.ok { background: var(--ok); }
+@media (max-width: 860px) { .notif-panel { position: fixed; left: 16px; right: 16px; top: 72px; width: auto; max-width: none; } }
