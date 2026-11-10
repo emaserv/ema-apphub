@@ -12,6 +12,7 @@ import { openapi } from './openapi';
 import applications from './routes/applications';
 import { privateAuth, publicAuth } from './routes/auth';
 import data from './routes/data';
+import notifications from './routes/notifications';
 import operations from './routes/operations';
 import { system, webhooks } from './routes/system';
 import { ping } from './services/docker';
@@ -42,7 +43,7 @@ export function createApp() {
 
   // privados
   app.use('/api', authenticate);
-  app.use('/api', privateAuth, applications, operations, data, system);
+  app.use('/api', privateAuth, applications, operations, data, system, notifications);
   app.use('/api', (_req, res) => res.status(404).json({ error: 'Ruta no encontrada' }));
   app.use(errorHandler);
   return app;

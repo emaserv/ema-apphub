@@ -23,6 +23,7 @@ Plataforma interna de **EMA Servicios** para registrar, almacenar, versionar, co
 * **Versionado** completo (código + Dockerfile + compose + variables + commit + comentario) y **rollback** a cualquier versión; **rollback automático** si el deploy falla.
 * **Pipeline CI/CD**: código → validación → build → tests → imagen (push opcional a registry) → deploy → health check.
 * **Health checks** periódicos por HTTP.
+* **Avisos** (campanita) para los superadministradores: deploy fallido, app caída (2 health checks seguidos) y recuperada, backup programado fallido. Se borran a los 90 días.
 * **PostgreSQL por ambiente**: crear, eliminar, reiniciar, estado, conexión, logs, usuarios (lectura / lectura-escritura), rotación de credenciales.
 * **Backups** de aplicación (tar.gz) y base (`pg_dump -Fc`): manuales, programados (cron + retención), descarga, restauración, historial.
 * **Logs en tiempo real** (WebSocket) con pausa, búsqueda, filtro por fecha y descarga; logs de app y de PostgreSQL.
