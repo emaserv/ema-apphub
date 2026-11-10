@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
-import { detect, pomJavaVersion, existingDockerfile, exposedPort } from '../src/services/detector';
+import { detect, pomJavaVersion, gradleJavaVersion, existingDockerfile, exposedPort } from '../src/services/detector';
 import { DOTNET_DEFAULT, GO_DEFAULT } from '../src/services/imageVersions';
 
 // ── Proyectos de prueba: cada test arma una carpeta temporal con los archivos que necesita ──
@@ -256,6 +256,19 @@ describe('Java', () => {
   test('Gradle (Groovy y Kotlin)', () => {
     assert.equal(detect(project({ 'build.gradle': '' })).technology, 'java-gradle');
     assert.equal(detect(project({ 'build.gradle.kts': '' })).technology, 'java-gradle');
+    assert.equal(detect(project({ 'build.gradle': '' })).buildConfig.javaVersion, '21', 'sin versión: 21');
+  });
+
+  test('Gradle: toma la versión de Java del build', () => {
+    assert.equal(detect(project({ 'build.gradle': "sourceCompatibility = '1.8'" })).buildConfig.javaVersion, '8');
+    assert.equal(detect(project({ 'build.gradle.kts': 'java { sourceCompatibility = JavaVersion.VERSION_17 }' })).buildConfig.javaVersion, '17');
+    assert.equal(gradleJavaVersion('sourceCompatibility = 1.8'), '8');
+    assert.equal(gradleJavaVersion('sourceCompatibility = JavaVersion.VERSION_1_8'), '8');
+    assert.equal(gradleJavaVersion('targetCompatibility = "11"'), '11');
+    assert.equal(gradleJavaVersion('java { toolchain { languageVersion = JavaLanguageVersion.of(21) } }'), '21');
+    assert.equal(gradleJavaVersion('kotlin { jvmToolchain(17) }'), '17');
+    // El toolchain manda sobre sourceCompatibility
+    assert.equal(gradleJavaVersion("sourceCompatibility = '11'\njava { toolchain { languageVersion.set(JavaLanguageVersion.of(17)) } }"), '17');
   });
 });
 

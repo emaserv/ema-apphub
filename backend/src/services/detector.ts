@@ -96,6 +96,27 @@ export function pomJavaVersion(pom: string): string {
   return '21';
 }
 
+/**
+ * Versión de Java de un build.gradle o build.gradle.kts. Busca, en orden:
+ * - toolchain: `JavaLanguageVersion.of(17)` o `jvmToolchain(17)` (Kotlin)
+ * - `sourceCompatibility` y después `targetCompatibility`, en cualquiera de sus formas:
+ *   `= 1.8`, `= '17'`, `= "17"`, `= JavaVersion.VERSION_1_8`, `= JavaVersion.VERSION_17`
+ * El formato viejo "1.8" es Java 8. Si no encuentra nada, usa 21.
+ */
+export function gradleJavaVersion(script: string): string {
+  const patterns = [
+    /JavaLanguageVersion\.of\(\s*(\d+)\s*\)/,
+    /jvmToolchain\(\s*(\d+)\s*\)/,
+    /sourceCompatibility\s*=\s*(?:JavaVersion\.VERSION_|['"])?(?:1[._])?(\d+)/,
+    /targetCompatibility\s*=\s*(?:JavaVersion\.VERSION_|['"])?(?:1[._])?(\d+)/,
+  ];
+  for (const re of patterns) {
+    const m = script.match(re);
+    if (m) return m[1];
+  }
+  return '21';
+}
+
 export function detect(root: string): Detection {
   const markers: string[] = [];
   const warnings: string[] = [];
@@ -202,7 +223,8 @@ export function detect(root: string): Detection {
     return base('java-maven', 'alta', { javaVersion: pomJavaVersion(read(root, 'pom.xml')), buildCommand: 'mvn -B -DskipTests package', testCommand: 'mvn -B test' });
   }
   if (exists(root, 'build.gradle') || exists(root, 'build.gradle.kts')) {
-    return base('java-gradle', 'alta', { javaVersion: '21', buildCommand: 'gradle bootJar --no-daemon || gradle build -x test --no-daemon' });
+    const script = read(root, 'build.gradle') || read(root, 'build.gradle.kts');
+    return base('java-gradle', 'alta', { javaVersion: gradleJavaVersion(script), buildCommand: 'gradle bootJar --no-daemon || gradle build -x test --no-daemon' });
   }
 
   // ── .NET
