@@ -26,14 +26,21 @@ declare global {
 export const AUTH_COOKIE = 'ema_session';
 export const CSRF_COOKIE = 'ema_csrf';
 
-export function signToken(userId: string): string {
-  return jwt.sign({ sub: userId }, config.jwtSecret, { expiresIn: `${config.jwtExpiresHours}h`, issuer: 'ema-apphub' });
+/** `sv` = session_version del usuario al emitir el token: si después cambia, el token deja de valer. */
+export function signToken(userId: string, sessionVersion: number): string {
+  return jwt.sign({ sub: userId, sv: sessionVersion }, config.jwtSecret, { expiresIn: `${config.jwtExpiresHours}h`, issuer: 'ema-apphub' });
 }
 
-export function issueSession(res: Response, userId: string) {
+export function issueSession(res: Response, userId: string, sessionVersion: number) {
   const maxAge = config.jwtExpiresHours * 3600 * 1000;
-  res.cookie(AUTH_COOKIE, signToken(userId), { httpOnly: true, sameSite: 'strict', secure: config.cookieSecure, maxAge, path: '/' });
+  res.cookie(AUTH_COOKIE, signToken(userId, sessionVersion), { httpOnly: true, sameSite: 'strict', secure: config.cookieSecure, maxAge, path: '/' });
   res.cookie(CSRF_COOKIE, crypto.randomBytes(24).toString('hex'), { httpOnly: false, sameSite: 'strict', secure: config.cookieSecure, maxAge, path: '/' });
+}
+
+/** Invalida todas las sesiones abiertas del usuario y devuelve la nueva versión. */
+export async function revokeSessions(userId: string): Promise<number> {
+  const r = await one(`UPDATE users SET session_version = session_version + 1 WHERE id=$1 RETURNING session_version`, [userId]);
+  return r?.session_version ?? 0;
 }
 
 export function clearSession(res: Response) {
@@ -41,13 +48,15 @@ export function clearSession(res: Response) {
   res.clearCookie(CSRF_COOKIE, { path: '/' });
 }
 
-export async function loadUser(userId: string): Promise<AuthUser | null> {
+/** Con `sessionVersion`, además exige que coincida con la del usuario (sesión no cerrada desde entonces). */
+export async function loadUser(userId: string, sessionVersion?: number): Promise<AuthUser | null> {
   const u = await one(
-    `SELECT u.id, u.username, u.full_name, u.email, u.active, u.must_change_password, r.code AS role, r.name AS role_name
+    `SELECT u.id, u.username, u.full_name, u.email, u.active, u.must_change_password, u.session_version, r.code AS role, r.name AS role_name
        FROM users u JOIN roles r ON r.id = u.role_id WHERE u.id = $1`,
     [userId],
   );
   if (!u || !u.active) return null;
+  if (sessionVersion !== undefined && sessionVersion !== u.session_version) return null;
   const perms = await q<{ code: string }>(
     `SELECT p.code FROM role_permissions rp JOIN permissions p ON p.id = rp.permission_id
       JOIN users u ON u.role_id = rp.role_id WHERE u.id = $1`,
@@ -63,8 +72,9 @@ export async function loadUser(userId: string): Promise<AuthUser | null> {
 export async function userFromToken(token?: string): Promise<AuthUser | null> {
   if (!token) return null;
   try {
-    const payload = jwt.verify(token, config.jwtSecret, { issuer: 'ema-apphub' }) as { sub: string };
-    return await loadUser(payload.sub);
+    const payload = jwt.verify(token, config.jwtSecret, { issuer: 'ema-apphub' }) as { sub: string; sv?: number };
+    // Tokens emitidos antes de esta versión no traen `sv`: valen como versión 0 hasta que venzan
+    return await loadUser(payload.sub, payload.sv ?? 0);
   } catch {
     return null;
   }

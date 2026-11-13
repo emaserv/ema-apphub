@@ -194,6 +194,7 @@ Copie los respaldos fuera del servidor. El `.env` contiene `MASTER_KEY`: guárde
 ## Seguridad
 
 * Sesión JWT en cookie `httpOnly` + `SameSite=Strict`, token CSRF de doble envío, contraseñas bcrypt, rate limiting (login: 10 intentos / 15 min).
+* Cerrar sesión, cambiar o resetear la contraseña y desactivar un usuario invalidan **todas** sus sesiones abiertas (en cualquier navegador), aunque el token no haya vencido.
 * RBAC granular por permiso; producción requiere `apps.deploy.prod`.
 * Secretos cifrados (AES-256-GCM) y nunca devueltos por la API.
 * El socket Docker sólo lo ve el backend; los comandos se ejecutan sin shell y sólo sobre contenedores con label `ema.managed=true`.
