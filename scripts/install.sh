@@ -17,11 +17,25 @@ if [ ! -f .env ]; then
   sed -i "s|^MASTER_KEY=.*|MASTER_KEY=$(openssl rand -hex 32)|" .env
   ADMIN_PW="Ema$(openssl rand -hex 6)"
   sed -i "s|^ADMIN_PASSWORD=.*|ADMIN_PASSWORD=${ADMIN_PW}|" .env
-  IP=$(hostname -I 2>/dev/null | awk '{print $1}')
+  # || true: si "hostname -I" no existe en la distribución, sigue con el valor de ejemplo en vez de cortar en silencio
+  IP=$(hostname -I 2>/dev/null | awk '{print $1}' || true)
   [ -n "${IP:-}" ] && sed -i "s|^PUBLIC_HOST=.*|PUBLIC_HOST=${IP}|" .env
   chmod 600 .env
-  echo "  Usuario inicial: admin / ${ADMIN_PW}  (se pedirá cambiarla al ingresar)"
-  echo "  ⚠ Edite .env para ajustar PLATFORM_DOMAIN, ACME_EMAIL y PUBLIC_HOST si corresponde."
+  # Se detiene acá a propósito: si arrancara con los valores de ejemplo, Traefik pediría certificados
+  # para un dominio que quizás todavía no apunta al servidor, y la MASTER_KEY quedaría sin respaldar.
+  echo
+  echo "✔ Se creó .env. Usuario inicial: admin / ${ADMIN_PW}  (se pedirá cambiarla al ingresar)"
+  echo "  Antes de continuar:"
+  echo "   1. Revise .env: PLATFORM_DOMAIN, ACME_EMAIL, PUBLIC_HOST y COOKIE_SECURE (ver docs/INSTALACION-SERVIDOR.md)."
+  echo "   2. Guarde la MASTER_KEY de .env en el gestor de contraseñas de la empresa."
+  echo "  Después vuelva a ejecutar: sudo ./scripts/install.sh"
+  exit 0
+fi
+
+if grep -q 'CAMBIAR_' .env; then
+  echo "✖ .env todavía tiene valores de ejemplo (CAMBIAR_…) en:"
+  grep -n 'CAMBIAR_' .env | cut -d= -f1
+  exit 1
 fi
 
 set -a; . ./.env; set +a
@@ -40,6 +54,7 @@ for i in $(seq 1 60); do
     echo "✔ EMA AppHub en línea:"
     echo "   http://${PUBLIC_HOST:-localhost}:${PLATFORM_HTTP_PORT:-8080}"
     [ -n "${PLATFORM_DOMAIN:-}" ] && echo "   https://${PLATFORM_DOMAIN}"
+    echo "  Siga con la verificación de docs/INSTALACION-SERVIDOR.md."
     exit 0
   fi
   sleep 3

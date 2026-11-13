@@ -6,6 +6,7 @@ Plataforma interna de **EMA Servicios** para registrar, almacenar, versionar, co
 |---|---|
 | [docs/01-ARQUITECTURA.md](docs/01-ARQUITECTURA.md) | Arquitectura, componentes, modelo de datos, flujo de deploy, API y seguridad |
 | [docs/INSTRUCTIVO-SUBIR-APLICACIONES.md](docs/INSTRUCTIVO-SUBIR-APLICACIONES.md) | **Instructivo paso a paso para subir y desplegar aplicaciones** |
+| [docs/INSTALACION-SERVIDOR.md](docs/INSTALACION-SERVIDOR.md) | **Guía de instalación en el servidor de producción**, con verificación paso a paso |
 | `/api/docs` | Documentación interactiva de la API (Swagger / OpenAPI 3) |
 
 ---
@@ -80,10 +81,11 @@ cp .env.example .env          # editar secretos y dominios
 docker compose up -d
 ```
 
-O con el instalador, que genera secretos aleatorios, crea `DATA_DIR`, descarga el logo y levanta todo:
+O con el instalador (recomendado; guía completa en [docs/INSTALACION-SERVIDOR.md](docs/INSTALACION-SERVIDOR.md)). Se ejecuta dos veces: la primera crea el `.env` con secretos aleatorios y se detiene para revisarlo y guardar la `MASTER_KEY`; la segunda crea `DATA_DIR`, descarga el logo y levanta todo:
 
 ```bash
-sudo ./scripts/install.sh
+sudo ./scripts/install.sh   # 1ra vez: crea .env → revisarlo y guardar la MASTER_KEY
+sudo ./scripts/install.sh   # 2da vez: instala y levanta la plataforma
 ```
 
 > **Importante: guarde la `MASTER_KEY` antes de cargar datos.** Apenas instalado, copie la `MASTER_KEY` del `.env` del servidor
