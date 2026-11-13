@@ -4,7 +4,7 @@ import { paths } from '../config';
 import { one, q } from '../db/pool';
 import { decrypt, encrypt } from '../lib/crypto';
 import { badRequest, conflict, notFound } from '../lib/http';
-import { bumpPatch, dirSize, rmrf, slugify, VERSION_RE } from '../lib/util';
+import { bumpPatch, dirSize, rmrf, safeJoin, slugify, VERSION_RE } from '../lib/util';
 import { AppRow, EnvRow, assertPortFree, envSnapshot, getApp, nextFreePort, runtimeEnv, upsertVar } from './core';
 import { createDatabase } from './database';
 import { BuildConfig, detect, Detection, existingDockerfile, exposedPort } from './detector';
@@ -247,8 +247,9 @@ export async function updateFromGit(app: AppRow, env: EnvRow | null, user: { id:
     const last = await one(`SELECT commit_sha FROM application_versions WHERE application_id=$1 ORDER BY created_at DESC LIMIT 1`, [app.id]);
     let source = path.join(dir, 'source');
     if (src.subdirectory) {
-      source = path.join(source, src.subdirectory.replace(/^\/+/, ''));
-      if (!source.startsWith(path.join(dir, 'source')) || !fs.existsSync(source)) throw badRequest('Subdirectorio inexistente en el repositorio');
+      // safeJoin rechaza rutas que salgan de source/ (incluida una carpeta hermana como "source-otra")
+      source = safeJoin(source, src.subdirectory.replace(/^\/+/, ''));
+      if (!fs.existsSync(source)) throw badRequest('Subdirectorio inexistente en el repositorio');
     }
     const v = await createVersion(app, source, {
       version: opts.version, comment: opts.comment || `Git ${src.branch || src.tag || 'HEAD'} @ ${sha.slice(0, 8)}${last?.commit_sha === sha ? ' (sin cambios)' : ''}`,

@@ -21,7 +21,7 @@ Plataforma interna de EMA Servicios para **almacenar, versionar, configurar y de
                 └──────┬───────┘   └─────▲───────────────────────────────┘
                        │ /api /ws        │ build / run / logs / exec / stats
                 ┌──────▼─────────────────┴──┐
-                │  backend (Node 20 + TS)   │──── /var/run/docker.sock (ÚNICO acceso)
+                │  backend (Node 24 + TS)   │──── /var/run/docker.sock (ÚNICO acceso)
                 │  Express · WS · Scheduler │
                 │  Docker CLI + Compose + Git│
                 └──────┬───────────┬────────┘

@@ -5,10 +5,8 @@ name: CI
 on:
   pull_request:
     branches: [master]
-    paths: ['backend/**', 'frontend/**', '.github/workflows/**']
   push:
     branches: [master]
-    paths: ['backend/**', 'frontend/**', '.github/workflows/**']
 
 # Si se sube un commit nuevo mientras el CI corre, cancela la corrida anterior (ahorra minutos)
 concurrency:
