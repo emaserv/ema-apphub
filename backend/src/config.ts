@@ -46,6 +46,8 @@ export const config = {
   adminEmail: process.env.ADMIN_EMAIL || 'admin@emaservicios.com.ar',
   adminPassword: process.env.ADMIN_PASSWORD || 'CambiarEsto123!',
   terminalEnabled: bool(process.env.TERMINAL_ENABLED, true),
+  /** Escaneo de vulnerabilidades de las imágenes con Trivy durante el deploy. */
+  scanEnabled: bool(process.env.SCAN_ENABLED, true),
 };
 
 export const paths = {

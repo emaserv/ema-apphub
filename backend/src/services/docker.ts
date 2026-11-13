@@ -1,8 +1,12 @@
+import crypto from 'crypto';
 import Docker from 'dockerode';
+import fs from 'fs';
+import os from 'os';
 import path from 'path';
 import { config } from '../config';
 import { run, runOk } from '../lib/exec';
 import { HttpError } from '../lib/http';
+import { TRIVY_IMAGE } from './imageVersions';
 
 /**
  * ÚNICO punto de acceso al runtime de contenedores.
@@ -66,6 +70,33 @@ export async function tagAndPush(source: string, target: string, onLine: (l: str
 
 export async function pullImage(tag: string, onLine: (l: string) => void) {
   await runOk('docker', ['pull', tag], { onLine, timeoutMs: BUILD_TIMEOUT() });
+}
+
+/** Volumen donde Trivy guarda su base de vulnerabilidades (se descarga una vez y se actualiza sola). */
+const TRIVY_CACHE_VOLUME = 'ema-apphub-trivy-cache';
+
+/**
+ * Escanea una imagen con Trivy y devuelve el reporte JSON.
+ * La imagen se exporta con `docker save` y se copia dentro del contenedor de Trivy: así Trivy
+ * NO recibe acceso al socket de Docker (no puede tocar otros contenedores ni el servidor).
+ */
+export async function scanImage(image: string): Promise<string> {
+  const id = crypto.randomUUID();
+  const tar = path.join(os.tmpdir(), `ema-scan-${id}.tar`);
+  const name = `ema-trivy-${id}`;
+  try {
+    await runOk('docker', ['save', '-o', tar, image], { timeoutMs: BUILD_TIMEOUT() });
+    await runOk('docker', [
+      'create', '--name', name, '-v', `${TRIVY_CACHE_VOLUME}:/root/.cache/trivy`, TRIVY_IMAGE,
+      'image', '--input', '/tmp/image.tar', '--format', 'json', '--severity', 'HIGH,CRITICAL', '--scanners', 'vuln', '--quiet', '--timeout', '15m',
+    ]);
+    await runOk('docker', ['cp', tar, `${name}:/tmp/image.tar`], { timeoutMs: BUILD_TIMEOUT() });
+    const r = await runOk('docker', ['start', '-a', name], { timeoutMs: BUILD_TIMEOUT() });
+    return r.stdout;
+  } finally {
+    fs.rmSync(tar, { force: true });
+    await run('docker', ['rm', '-f', name]).catch(() => undefined);
+  }
 }
 
 // ───────── contenedores ─────────

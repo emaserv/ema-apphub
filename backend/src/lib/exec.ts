@@ -61,6 +61,9 @@ export function run(cmd: string, args: string[], opts: RunOptions = {}): Promise
       if (buf.trim() && opts.onLine) opts.onLine(buf);
       void outDone.then(() => resolve({ code: code ?? 1, stdout, stderr }));
     });
+    // Si el proceso termina sin leer toda la entrada, escribirle da EPIPE: sin este handler, ese error
+    // no capturado tira abajo todo el proceso de Node (el backend). El resultado se informa por el código de salida.
+    child.stdin.on('error', () => undefined);
     if (opts.stdinFile) fs.createReadStream(opts.stdinFile).pipe(child.stdin);
     else if (opts.input !== undefined) child.stdin.end(opts.input);
     else child.stdin.end();

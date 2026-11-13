@@ -23,7 +23,8 @@ Plataforma interna de **EMA Servicios** para registrar, almacenar, versionar, co
 * **Versionado** completo (código + Dockerfile + compose + variables + commit + comentario) y **rollback** a cualquier versión; **rollback automático** si el deploy falla.
 * **Pipeline CI/CD**: código → validación → build → tests → imagen (push opcional a registry) → deploy → health check.
 * **Health checks** periódicos por HTTP.
-* **Avisos** (campanita) para los superadministradores: deploy fallido, app caída (2 health checks seguidos) y recuperada, backup programado fallido. Se borran a los 90 días.
+* **Avisos** (campanita) para los superadministradores: deploy fallido, app caída (2 health checks seguidos) y recuperada, backup programado fallido y vulnerabilidades críticas en una imagen. Se borran a los 90 días.
+* **Escaneo de vulnerabilidades** de cada imagen con Trivy durante el deploy: el resultado queda en el log. En Producción, el deploy se bloquea si hay vulnerabilidades críticas con arreglo disponible (los rollbacks nunca se bloquean). Si Trivy no puede correr (por ejemplo, sin acceso a internet para bajar su base de vulnerabilidades), el deploy sigue con una advertencia.
 * **PostgreSQL por ambiente**: crear, eliminar, reiniciar, estado, conexión, logs, usuarios (lectura / lectura-escritura), rotación de credenciales.
 * **Backups** de aplicación (tar.gz) y base (`pg_dump -Fc`): manuales, programados (cron + retención), descarga, restauración, historial.
 * **Logs en tiempo real** (WebSocket) con pausa, búsqueda, filtro por fecha y descarga; logs de app y de PostgreSQL.
@@ -127,6 +128,7 @@ El frontend usa `frontend/public/logo-ema.png` (logo principal de www.emaservici
 | `DEPLOY_HEALTH_WAIT_SEC` | Espera del health check en un deploy | `90` |
 | `HEALTH_INTERVAL_SEC` | Frecuencia de health checks | `60` |
 | `TERMINAL_ENABLED` | Habilita la terminal web | `true` |
+| `SCAN_ENABLED` | Escaneo de vulnerabilidades con Trivy en cada deploy (`false` lo desactiva, por ejemplo para destrabar un deploy urgente) | `true` |
 
 ## Puertos
 

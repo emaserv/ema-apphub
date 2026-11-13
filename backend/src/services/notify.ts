@@ -2,10 +2,10 @@ import { q } from '../db/pool';
 
 /**
  * Avisos dentro de AppHub (campanita) para los superadministradores activos:
- * deploy fallido, app caída / recuperada y backup programado fallido.
+ * deploy fallido, app caída / recuperada, backup programado fallido y vulnerabilidades críticas en una imagen.
  */
 
-export type NoticeKind = 'deploy_failed' | 'deploy_rolled_back' | 'app_down' | 'app_recovered' | 'backup_failed';
+export type NoticeKind = 'deploy_failed' | 'deploy_rolled_back' | 'app_down' | 'app_recovered' | 'backup_failed' | 'image_vulnerable';
 export interface Notice { kind: NoticeKind; severity: 'error' | 'warn' | 'ok'; title: string; body: string; appId?: string }
 interface AppRef { id: string; name: string }
 
@@ -70,6 +70,18 @@ export function healthNotice(p: { app: AppRef; env: string; kind: 'down' | 'reco
         title: `${p.app.name} (${p.env}) se recuperó`,
         body: 'Volvió a responder correctamente.',
       };
+}
+
+/** Vulnerabilidades CRÍTICAS en una imagen que igual se desplegó (fuera de production, o sin arreglo disponible). */
+export function vulnerableImageNotice(p: { app: AppRef; env: string; version: string; critical: number; criticalFixable: number }): Notice {
+  return {
+    kind: 'image_vulnerable', severity: 'warn', appId: p.app.id,
+    title: `${p.app.name} ${p.version} (${p.env}): ${p.critical} vulnerabilidad(es) crítica(s) en la imagen`,
+    body: lines(
+      `${p.criticalFixable} con arreglo disponible. El detalle está en el log del deploy.`,
+      p.criticalFixable > 0 && 'Conviene actualizar esas dependencias antes de desplegar en production: ahí el deploy se bloquea.',
+    ),
+  };
 }
 
 export function backupFailedNotice(p: { app: AppRef; env: string; type: string; error: string }): Notice {
