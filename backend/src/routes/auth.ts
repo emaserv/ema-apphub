@@ -4,7 +4,7 @@ import rateLimit from 'express-rate-limit';
 import { z } from 'zod';
 import { one, q } from '../db/pool';
 import { ah, badRequest, conflict, HttpError, notFound, parse } from '../lib/http';
-import { authenticate, clearSession, issueSession, requirePerm } from '../middleware/auth';
+import { AUTH_COOKIE, authenticate, clearSession, issueSession, requirePerm, revokeSessions, userFromToken } from '../middleware/auth';
 import { audit } from '../services/audit';
 
 export const publicAuth = Router();
@@ -25,15 +25,22 @@ publicAuth.post('/auth/login', loginLimiter, ah(async (req, res) => {
     throw new HttpError(401, 'Usuario o contraseña incorrectos');
   }
   await q(`UPDATE users SET last_login_at=now() WHERE id=$1`, [u.id]);
-  issueSession(res, u.id);
+  issueSession(res, u.id, u.session_version);
   await audit(req, { action: 'login', entityType: 'user', entityId: u.id }, { id: u.id, username: u.username });
   res.json({ ok: true, mustChangePassword: u.must_change_password });
 }));
 
-publicAuth.post('/auth/logout', (req, res) => {
+// Cierra TODAS las sesiones del usuario (todos los navegadores), no sólo borra la cookie de éste:
+// así un token copiado deja de servir. Es pública para que siempre se pueda limpiar la cookie.
+publicAuth.post('/auth/logout', ah(async (req, res) => {
+  const user = await userFromToken(req.cookies?.[AUTH_COOKIE]);
+  if (user) {
+    await revokeSessions(user.id);
+    await audit(req, { action: 'logout', entityType: 'user', entityId: user.id }, { id: user.id, username: user.username });
+  }
   clearSession(res);
   res.json({ ok: true });
-});
+}));
 
 privateAuth.get('/auth/me', (req, res) => res.json(req.user));
 
@@ -42,6 +49,8 @@ privateAuth.post('/auth/change-password', ah(async (req, res) => {
   const u = await one(`SELECT password_hash FROM users WHERE id=$1`, [req.user!.id]);
   if (!(await bcrypt.compare(b.currentPassword, u.password_hash))) throw badRequest('La contraseña actual no es correcta');
   await q(`UPDATE users SET password_hash=$2, must_change_password=false, updated_at=now() WHERE id=$1`, [req.user!.id, await bcrypt.hash(b.newPassword, 12)]);
+  // Cierra las sesiones de otros navegadores y renueva la de éste para no echar al usuario
+  issueSession(res, req.user!.id, await revokeSessions(req.user!.id));
   await audit(req, { action: 'password_change', entityType: 'user', entityId: req.user!.id });
   res.json({ ok: true });
 }));
@@ -90,6 +99,11 @@ privateAuth.put('/users/:uid', requirePerm('users.manage'), ah(async (req, res) 
   await q(`UPDATE users SET email=COALESCE($2,email), full_name=COALESCE($3,full_name), role_id=COALESCE((SELECT id FROM roles WHERE code=$4), role_id),
              active=COALESCE($5,active), password_hash=COALESCE($6,password_hash), must_change_password = must_change_password OR $7, updated_at=now() WHERE id=$1`,
     [u.id, b.email ?? null, b.fullName ?? null, b.role ?? null, b.active ?? null, b.password ? await bcrypt.hash(b.password, 12) : null, !!b.password]);
+  // Contraseña reseteada o usuario desactivado: se cierran sus sesiones abiertas
+  if (b.password || b.active === false) {
+    const sv = await revokeSessions(u.id);
+    if (u.id === req.user!.id) issueSession(res, u.id, sv); // un admin que resetea su propia contraseña sigue conectado
+  }
   await audit(req, { action: 'user_update', entityType: 'user', entityId: u.id, details: { ...b, password: b.password ? '(reset)' : undefined } });
   res.json({ ok: true });
 }));
@@ -99,6 +113,7 @@ privateAuth.delete('/users/:uid', requirePerm('users.manage'), ah(async (req, re
   const u = await one(`SELECT username FROM users WHERE id=$1`, [req.params.uid]);
   if (!u) throw notFound('Usuario no encontrado');
   await q(`UPDATE users SET active=false, updated_at=now() WHERE id=$1`, [req.params.uid]);
+  await revokeSessions(req.params.uid);
   await audit(req, { action: 'user_disable', entityType: 'user', entityId: req.params.uid, details: { username: u.username } });
   res.json({ ok: true });
 }));

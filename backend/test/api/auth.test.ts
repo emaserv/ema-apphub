@@ -102,3 +102,66 @@ describe('alta de usuarios', () => {
     assert.equal(me.mustChangePassword, true);
   });
 });
+
+describe('cierre de sesión real (session_version)', () => {
+  /** Arma la sesión con las cookies nuevas que devolvió una respuesta (cambio o reseteo de contraseña). */
+  const renovada = (headers: Headers): Session => {
+    const pairs = headers.getSetCookie().map((c) => c.split(';')[0]);
+    const csrf = pairs.find((p) => p.startsWith('ema_csrf='))?.slice('ema_csrf='.length);
+    assert.ok(csrf && pairs.some((p) => p.startsWith('ema_session=')), 'la respuesta debe renovar la sesión');
+    return { cookie: pairs.join('; '), csrf };
+  };
+
+  test('cerrar sesión invalida el token aunque alguien lo haya copiado, en todos los navegadores', async () => {
+    const u = await createUser('developer', 'sale');
+    const pc = await login(u.username, u.password);
+    const copia = { ...pc }; // alguien copió la cookie antes de que saliera
+    const otraPc = await login(u.username, u.password);
+
+    assert.equal((await api('POST', '/auth/logout', { session: pc, body: {} })).status, 200);
+
+    assert.equal((await api('GET', '/auth/me', { session: copia })).status, 401, 'el token copiado ya no sirve');
+    assert.equal((await api('GET', '/auth/me', { session: otraPc })).status, 401, 'también se cierra en los otros navegadores');
+    assert.ok(await one(`SELECT 1 FROM audit_logs WHERE action = 'logout' AND username = 'sale'`), 'queda en la auditoría');
+    await login(u.username, u.password); // puede volver a entrar
+  });
+
+  test('cerrar sesión sin estar conectado responde OK y no falla', async () => {
+    assert.equal((await api('POST', '/auth/logout', { body: {} })).status, 200);
+  });
+
+  test('cambiar la contraseña cierra las otras sesiones pero mantiene la actual', async () => {
+    const u = await createUser('viewer', 'cambia2', 'Vieja12345x');
+    const aca = await login(u.username, u.password);
+    const otra = await login(u.username, u.password);
+
+    const r = await api('POST', '/auth/change-password', { session: aca, body: { currentPassword: 'Vieja12345x', newPassword: 'Nueva12345x' } });
+    assert.equal(r.status, 200);
+
+    assert.equal((await api('GET', '/auth/me', { session: otra })).status, 401, 'la otra sesión se cierra');
+    assert.equal((await api('GET', '/auth/me', { session: aca })).status, 401, 'el token viejo de esta sesión tampoco sirve');
+    assert.equal((await api('GET', '/auth/me', { session: renovada(r.headers) })).status, 200, 'pero el navegador recibió uno nuevo y sigue conectado');
+  });
+
+  test('resetear la contraseña desde Usuarios cierra las sesiones abiertas de ese usuario', async () => {
+    const admin = await login(ADMIN.username, ADMIN.password);
+    const u = await createUser('developer', 'reseteado');
+    const s = await login(u.username, u.password);
+
+    assert.equal((await api('PUT', `/users/${u.id}`, { session: admin, body: { password: 'Reseteada123' } })).status, 200);
+
+    assert.equal((await api('GET', '/auth/me', { session: s })).status, 401);
+    assert.equal((await api('GET', '/auth/me', { session: admin })).status, 200, 'el admin que reseteó sigue conectado');
+  });
+
+  test('un administrador que resetea su propia contraseña desde Usuarios sigue conectado', async () => {
+    const jefe = await createUser('superadmin', 'jefe');
+    const s = await login(jefe.username, jefe.password);
+
+    const r = await api('PUT', `/users/${jefe.id}`, { session: s, body: { password: 'OtraClave123' } });
+    assert.equal(r.status, 200);
+
+    assert.equal((await api('GET', '/auth/me', { session: s })).status, 401, 'el token anterior ya no sirve');
+    assert.equal((await api('GET', '/auth/me', { session: renovada(r.headers) })).status, 200);
+  });
+});
