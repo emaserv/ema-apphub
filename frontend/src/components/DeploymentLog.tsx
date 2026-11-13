@@ -4,7 +4,7 @@ import { api, ENV_LABEL, fmtDate } from '../api/client';
 import { StatusBadge } from './ui';
 
 const STEPS = [
-  ['prepare', 'Código'], ['validate', 'Validación'], ['build', 'Build'], ['test', 'Tests'], ['push', 'Imagen'], ['deploy', 'Deploy'], ['health', 'Health check'],
+  ['prepare', 'Código'], ['validate', 'Validación'], ['build', 'Build'], ['test', 'Tests'], ['scan', 'Seguridad'], ['push', 'Imagen'], ['deploy', 'Deploy'], ['health', 'Health check'],
 ] as const;
 
 /** Sigue un deployment (polling) mostrando el pipeline y su log. */

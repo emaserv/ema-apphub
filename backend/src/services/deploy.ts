@@ -9,7 +9,8 @@ import {
   AppRow, EnvRow, VersionRow, assertPortFree, envProject, getApp, getVersion, imageTag, registryTag, writeEnvFiles,
 } from './core';
 import * as dk from './docker';
-import { deployFailedNotice, notify } from './notify';
+import { deployFailedNotice, notify, vulnerableImageNotice } from './notify';
+import { ScanSummary, blockMessage, formatScan, parseTrivyReport, scanDecision } from './scan';
 import { writeSupportFiles } from './templates';
 
 type Trigger = 'manual' | 'git' | 'webhook' | 'rollback' | 'auto_rollback' | 'clone' | 'restore';
@@ -85,7 +86,25 @@ export function planImage(o: { imageExists: boolean; sourceExists: boolean; forc
 }
 
 /** Prepara archivos, construye (o reutiliza) la imagen y levanta el ambiente. */
-async function deployVersion(app: AppRow, env: EnvRow, version: VersionRow, log: DeployLog, opts: { forceRebuild?: boolean }) {
+/** Escanea la imagen antes de publicarla y levantarla. Ver reglas en services/scan.ts. */
+async function scanStep(app: AppRow, env: EnvRow, version: VersionRow, image: string, log: DeployLog, trigger?: Trigger) {
+  await log.step('scan', 'Escaneando vulnerabilidades (Trivy)');
+  log.line('La primera vez se descarga la base de vulnerabilidades (unos 130 MB): puede tardar un par de minutos.');
+  let summary: ScanSummary;
+  try {
+    summary = parseTrivyReport(await dk.scanImage(image));
+  } catch (e: any) {
+    log.line(`⚠ No se pudo escanear la imagen, el deploy continúa sin escaneo: ${String(e?.message || e).slice(-500)}`);
+    return;
+  }
+  formatScan(summary).forEach((l) => log.line(l));
+  if (scanDecision(summary, env.name, trigger) === 'block') throw new Error(blockMessage(summary));
+  if (summary.critical > 0) {
+    notify(vulnerableImageNotice({ app, env: env.name, version: version.version, critical: summary.critical, criticalFixable: summary.criticalFixable }));
+  }
+}
+
+async function deployVersion(app: AppRow, env: EnvRow, version: VersionRow, log: DeployLog, opts: { forceRebuild?: boolean; trigger?: Trigger }) {
   const image = imageTag(app.slug, version.version);
   const container = envProject(app, env);
 
@@ -145,6 +164,8 @@ async function deployVersion(app: AppRow, env: EnvRow, version: VersionRow, log:
     log.line('Tests OK');
   }
 
+  if (config.scanEnabled) await scanStep(app, env, version, image, log, opts.trigger);
+
   if (reg && !(await one(`SELECT 1 FROM docker_images WHERE version_id=$1 AND pushed`, [version.id]))) {
     await log.step('push', `Publicando ${reg.tag}`);
     if (reg.registry.username) await dk.registryLogin(reg.registry.url, reg.registry.username, decrypt(reg.registry.password_enc));
@@ -203,7 +224,7 @@ async function runDeployment(depId: string, r: DeployRequest) {
   await setEnvStatus(env.id, 'deploying');
   const user = r.userId ? { id: r.userId, username: r.username ?? '' } : null;
   try {
-    await deployVersion(app, env, version, log, { forceRebuild: r.forceRebuild });
+    await deployVersion(app, env, version, log, { forceRebuild: r.forceRebuild, trigger: r.trigger });
     await setEnvStatus(env.id, 'running', { deployed_version_id: version.id, health_status: 'healthy', health_checked_at: new Date().toISOString() });
     if (env.is_default) await q(`UPDATE applications SET current_version_id=$2, updated_at=now() WHERE id=$1`, [app.id, version.id]);
     log.line(`✔ Deploy exitoso: ${app.name} ${version.version} en ${env.name}`);
@@ -224,7 +245,7 @@ async function runDeployment(depId: string, r: DeployRequest) {
         const prev = await getVersion(app.id, previousId!);
         log.line(`↺ Rollback automático a ${prev.version}`);
         env = (await one<EnvRow>(`SELECT * FROM application_environments WHERE id=$1`, [r.envId]))!;
-        await deployVersion(app, env, prev, log, {});
+        await deployVersion(app, env, prev, log, { trigger: 'auto_rollback' });
         await setEnvStatus(env.id, 'running', { deployed_version_id: prev.id, health_status: 'healthy' });
         log.line(`✔ Rollback completado: ${prev.version} activa`);
         await log.close();
