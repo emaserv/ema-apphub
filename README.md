@@ -39,7 +39,7 @@ Plataforma interna de **EMA Servicios** para registrar, almacenar, versionar, co
 ## Arquitectura (resumen)
 
 ```
-Traefik (80/443) ──► frontend (Nginx + React/Vite) ──► backend (Node 20 + TypeScript + Express)
+Traefik (80/443) ──► frontend (Nginx + React/Vite) ──► backend (Node 24 + TypeScript + Express)
         │                                                   │  ├─ PostgreSQL de la plataforma
         └──► aplicaciones desplegadas (red ema_apps)  ◄─────┘  └─ /var/run/docker.sock (único acceso)
 ```
