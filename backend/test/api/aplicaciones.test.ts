@@ -25,7 +25,17 @@ describe('ciclo de vida de una aplicación (sin deploy)', () => {
   test('no permite dos apps con el mismo identificador ni datos inválidos', async () => {
     assert.equal((await api('POST', '/applications', { session: s, body: newApp('gestion de ordenes') })).status, 409);
     assert.equal((await api('POST', '/applications', { session: s, body: newApp('Puerto malo', { internalPort: 70000 }) })).status, 400);
-    assert.equal((await api('POST', '/applications', { session: s, body: newApp('X') })).status, 400, 'nombre muy corto');
+    const corto = await api('POST', '/applications', { session: s, body: newApp('X') });
+    assert.equal(corto.status, 400, 'nombre muy corto');
+    assert.equal(corto.body.error, 'Datos inválidos');
+    assert.match(corto.body.details.fieldErrors.name[0], /Demasiado pequeño/, 'mensajes de validación en español');
+  });
+
+  test('guarda la configuración de build (objeto clave → valor) y rechaza otra cosa', async () => {
+    const ok = await api('PUT', `/applications/${id}`, { session: s, body: { buildConfig: { nodeVersion: '22', buildCommand: 'npm run build' } } });
+    assert.equal(ok.status, 200, JSON.stringify(ok.body));
+    assert.deepEqual((await one(`SELECT build_config FROM applications WHERE id=$1`, [id])).build_config, { nodeVersion: '22', buildCommand: 'npm run build' });
+    assert.equal((await api('PUT', `/applications/${id}`, { session: s, body: { buildConfig: ['no', 'es', 'objeto'] } })).status, 400);
   });
 
   test('listar y ver el detalle', async () => {
