@@ -7,6 +7,7 @@ import { AUTH_COOKIE, can, userFromToken } from '../middleware/auth';
 import { audit } from '../services/audit';
 import { envProject, getApp, getEnv } from '../services/core';
 import * as dk from '../services/docker';
+import { trackSocket } from '../services/liveSockets';
 
 const send = (ws: WebSocket, msg: unknown) => ws.readyState === WebSocket.OPEN && ws.send(JSON.stringify(msg));
 
@@ -33,6 +34,7 @@ export function attachWebSockets(server: Server) {
     const user = await userFromToken(token);
     if (!user) { socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n'); socket.destroy(); return; }
     wss.handleUpgrade(req, socket, head, (ws) => {
+      trackSocket(user.id, ws); // para cortarlo si se cierran las sesiones del usuario
       const ip = (req.headers['x-forwarded-for'] as string)?.split(',')[0] || req.socket.remoteAddress || '';
       const fakeReq: any = { user, ip, socket: req.socket };
       if (url.pathname === '/ws/logs') void handleLogs(ws, url, user, fakeReq);

@@ -165,7 +165,7 @@ Los backups de cada aplicación se gestionan desde la interfaz. Para respaldar *
 0 2 * * * /opt/ema-apphub/scripts/backup-platform.sh /mnt/backups/apphub
 ```
 
-Copie los respaldos fuera del servidor. El `.env` contiene `MASTER_KEY`: guárdelo en un lugar seguro.
+Copie los respaldos fuera del servidor. La copia del `.env` va **sin `MASTER_KEY`** (la clave se guarda aparte, ver abajo); igual contiene otras contraseñas (base de AppHub, `JWT_SECRET`), así que guarde los respaldos en un lugar seguro.
 
 ### MASTER_KEY
 
@@ -189,7 +189,7 @@ Copie los respaldos fuera del servidor. El `.env` contiene `MASTER_KEY`: guárde
 | App caída | *Reiniciar* o *Recrear* desde la app; ver *Logs*. Docker la reinicia sola (`restart: unless-stopped`). |
 | Base de una app dañada | *Backups → Restaurar* el `.dump` deseado. |
 | Reinicio del servidor | Todos los contenedores vuelven solos. Deploys interrumpidos quedan marcados como fallidos. |
-| Servidor perdido | Nuevo servidor → instalar → `./scripts/restore-platform.sh <dump> <data.tar.gz>` con el `.env` original → *Deploy* de cada app (las imágenes se reconstruyen desde las versiones guardadas). |
+| Servidor perdido | Nuevo servidor → instalar → `./scripts/restore-platform.sh <dump> <data.tar.gz>` con el `.env` del backup (`apphub-env-*.env`) completando `MASTER_KEY` desde el gestor de contraseñas → *Deploy* de cada app (las imágenes se reconstruyen desde las versiones guardadas). |
 | Se perdió `MASTER_KEY` | Los secretos no pueden recuperarse. Si el backend no arranca por la verificación de clave, agregue `MASTER_KEY_ACCEPT_NEW=true` al `.env` y `docker compose up -d`: arranca con la clave nueva. Luego recargue las variables secretas y las credenciales de Git/registries, rote las contraseñas de las bases y quite `MASTER_KEY_ACCEPT_NEW`. |
 
 ## Seguridad
