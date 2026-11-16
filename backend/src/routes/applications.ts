@@ -28,7 +28,7 @@ r.param('id', appAccessParam);
 const ENV_NAME = z.enum(['development', 'test', 'staging', 'production']);
 const VOLUME = z.object({ source: z.string().min(1).max(200), target: z.string().min(1).max(255), type: z.enum(['volume', 'bind']), readOnly: z.boolean().optional() });
 const VAR = z.object({ key: z.string().regex(/^[A-Za-z_][A-Za-z0-9_]*$/), value: z.string().max(20000), isSecret: z.boolean().optional() });
-const BUILD_CONFIG = z.record(z.any()).optional();
+const BUILD_CONFIG = z.record(z.string(), z.any()).optional();
 const GIT = z.object({
   url: z.string().min(4).max(500),
   provider: z.string().optional(),

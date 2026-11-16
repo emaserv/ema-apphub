@@ -1,6 +1,9 @@
 import { NextFunction, Request, RequestHandler, Response } from 'express';
 import { z, ZodError, ZodTypeAny } from 'zod';
 
+// Mensajes de validación en español (se muestran en pantalla junto a "Datos inválidos")
+z.config(z.locales.es());
+
 export class HttpError extends Error {
   constructor(public status: number, message: string, public details?: unknown) {
     super(message);
