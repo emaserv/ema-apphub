@@ -1,4 +1,4 @@
-import { useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router';
 import { Database } from 'lucide-react';
 import { api, ENV_LABEL, fmtDate } from '../api/client';
 import { Empty, Spinner, StatusBadge, useData } from '../components/ui';

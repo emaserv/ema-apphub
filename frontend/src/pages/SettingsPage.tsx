@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams } from 'react-router';
 import { KeyRound, Plus, Server, Trash2 } from 'lucide-react';
 import { api, fmtDate } from '../api/client';
 import { useAuth } from '../auth';

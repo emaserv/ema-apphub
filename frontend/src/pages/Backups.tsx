@@ -1,4 +1,4 @@
-import { useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router';
 import { Download } from 'lucide-react';
 import { api, ENV_LABEL, fmtBytes, fmtDate } from '../api/client';
 import { useAuth } from '../auth';

@@ -1,5 +1,5 @@
 import { FormEvent, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router';
 import { LogIn, MapPin } from 'lucide-react';
 import { api } from '../api/client';
 import { useAuth } from '../auth';

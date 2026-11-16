@@ -1,5 +1,5 @@
 import { DragEvent, useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router';
 import { AlertTriangle, ArrowLeft, ArrowRight, Check, FileArchive, FolderUp, GitBranch, PackagePlus, RefreshCw, Rocket, Wand2 } from 'lucide-react';
 import { api, ENV_LABEL, fmtBytes, uploadForm } from '../api/client';
 import { useAuth } from '../auth';

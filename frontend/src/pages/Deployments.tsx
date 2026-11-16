@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router';
 import { api, ENV_LABEL, fmtDate } from '../api/client';
 import DeploymentLog from '../components/DeploymentLog';
 import { Empty, Modal, Spinner, StatusBadge, useData } from '../components/ui';
