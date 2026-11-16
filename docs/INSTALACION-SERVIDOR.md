@@ -84,7 +84,7 @@ Marcar cada punto. Si alguno falla, ver la sección 6.
 
 ## 4. Backup de la plataforma
 
-Respalda la base de AppHub, `DATA_DIR` y el `.env`. Programarlo con cron:
+Respalda la base de AppHub, `DATA_DIR` y el `.env` (sin la `MASTER_KEY`, que queda sólo en el gestor de contraseñas). Programarlo con cron:
 
 ```bash
 sudo mkdir -p /var/backups/apphub
@@ -93,7 +93,7 @@ sudo crontab -e
 0 2 * * * /opt/ema-apphub/scripts/backup-platform.sh /var/backups/apphub >> /var/log/apphub-backup.log 2>&1
 ```
 
-- [ ] Correrlo una vez a mano (`sudo /opt/ema-apphub/scripts/backup-platform.sh /var/backups/apphub`) y verificar que se crean `apphub-db-*.dump`, `apphub-data-*.tar.gz` y `apphub-env-*.env`.
+- [ ] Correrlo una vez a mano (`sudo /opt/ema-apphub/scripts/backup-platform.sh /var/backups/apphub`) y verificar que se crean `apphub-db-*.dump`, `apphub-data-*.tar.gz` y `apphub-env-*.env` (este último con `MASTER_KEY=` vacía).
 
 > **Pendiente:** hoy estos backups quedan en el mismo servidor. La copia fuera del servidor (NAS o almacenamiento en la nube) y el simulacro de restauración se van a configurar en una etapa siguiente.
 

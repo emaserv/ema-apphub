@@ -29,7 +29,11 @@ export default function WebTerminal({ appId, environment, service }: { appId: st
       }
       term.write(ev.data);
     };
-    ws.onclose = () => { setStatus('Sesión finalizada'); term.writeln('\r\n\x1b[33m[sesión finalizada]\x1b[0m'); };
+    ws.onclose = (ev) => {
+      const why = ev.reason ? `: ${ev.reason}` : '';
+      setStatus(`Sesión finalizada${why}`);
+      term.writeln(`\r\n\x1b[33m[sesión finalizada${why}]\x1b[0m`);
+    };
     const d = term.onData((data) => ws.readyState === WebSocket.OPEN && ws.send(JSON.stringify({ type: 'input', data })));
     const onResize = () => { fit.fit(); ws.readyState === WebSocket.OPEN && ws.send(JSON.stringify({ type: 'resize', cols: term.cols, rows: term.rows })); };
     window.addEventListener('resize', onResize);

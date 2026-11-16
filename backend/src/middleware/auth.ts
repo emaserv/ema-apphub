@@ -4,6 +4,7 @@ import jwt from 'jsonwebtoken';
 import { config } from '../config';
 import { one, q } from '../db/pool';
 import { HttpError } from '../lib/http';
+import { closeUserSockets } from '../services/liveSockets';
 
 export interface AuthUser {
   id: string;
@@ -37,9 +38,10 @@ export function issueSession(res: Response, userId: string, sessionVersion: numb
   res.cookie(CSRF_COOKIE, crypto.randomBytes(24).toString('hex'), { httpOnly: false, sameSite: 'strict', secure: config.cookieSecure, maxAge, path: '/' });
 }
 
-/** Invalida todas las sesiones abiertas del usuario y devuelve la nueva versión. */
+/** Invalida todas las sesiones abiertas del usuario (también corta su terminal y logs en vivo) y devuelve la nueva versión. */
 export async function revokeSessions(userId: string): Promise<number> {
   const r = await one(`UPDATE users SET session_version = session_version + 1 WHERE id=$1 RETURNING session_version`, [userId]);
+  closeUserSockets(userId);
   return r?.session_version ?? 0;
 }
 
