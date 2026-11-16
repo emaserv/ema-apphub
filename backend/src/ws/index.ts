@@ -1,4 +1,4 @@
-import cookie from 'cookie';
+import { parse as parseCookie } from 'cookie';
 import { IncomingMessage, Server } from 'http';
 import { PassThrough } from 'stream';
 import { WebSocket, WebSocketServer } from 'ws';
@@ -32,7 +32,7 @@ export function attachWebSockets(server: Server) {
   server.on('upgrade', async (req, socket, head) => {
     const url = new URL(req.url || '/', 'http://x');
     if (!url.pathname.startsWith('/ws/') || !originAllowed(req)) { socket.destroy(); return; }
-    const token = cookie.parse(req.headers.cookie || '')[AUTH_COOKIE];
+    const token = parseCookie(req.headers.cookie || '')[AUTH_COOKIE];
     const user = await userFromToken(token);
     if (!user) { socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n'); socket.destroy(); return; }
     wss.handleUpgrade(req, socket, head, (ws) => {

@@ -1,4 +1,4 @@
-import cron from 'node-cron';
+import cron, { type ScheduledTask } from 'node-cron';
 import fs from 'fs';
 import os from 'os';
 import { config } from '../config';
@@ -113,10 +113,10 @@ export function hostMetrics() {
 
 // ───────── programación ─────────
 
-const scheduled = new Map<string, cron.ScheduledTask>();
+const scheduled = new Map<string, ScheduledTask>();
 
 export async function reloadBackupSchedules() {
-  scheduled.forEach((t) => t.stop());
+  scheduled.forEach((t) => void t.destroy()); // destroy (no sólo stop): node-cron 4 guarda las tareas en un registro global
   scheduled.clear();
   const rows = await q(`SELECT id, cron FROM backup_schedules WHERE enabled`);
   for (const r of rows) {
