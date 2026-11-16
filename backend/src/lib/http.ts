@@ -14,8 +14,14 @@ export const notFound = (m = 'No encontrado') => new HttpError(404, m);
 export const forbidden = (m = 'Permiso denegado') => new HttpError(403, m);
 export const conflict = (m: string, d?: unknown) => new HttpError(409, m, d);
 
+/**
+ * Request de nuestras rutas. Express 5 tipa cada parámetro como `string | string[]` (por las rutas con comodín `*nombre`);
+ * acá no usamos comodines, así que `:id`, `:did`, etc. son siempre un string.
+ */
+export type Req = Request<Record<string, string>>;
+
 export const ah =
-  (fn: (req: Request, res: Response, next: NextFunction) => Promise<unknown>): RequestHandler =>
+  (fn: (req: Req, res: Response, next: NextFunction) => Promise<unknown>): RequestHandler<Record<string, string>> =>
   (req, res, next) => {
     fn(req, res, next).catch(next);
   };

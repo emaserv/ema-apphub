@@ -38,6 +38,12 @@ describe('ciclo de vida de una aplicación (sin deploy)', () => {
     assert.equal((await api('PUT', `/applications/${id}`, { session: s, body: { buildConfig: ['no', 'es', 'objeto'] } })).status, 400);
   });
 
+  test('un POST sin cuerpo (como los que manda el frontend) se trata como cuerpo vacío', async () => {
+    const r = await api('POST', `/applications/${id}/rollback`, { session: s });
+    assert.equal(r.status, 400, JSON.stringify(r.body));
+    assert.equal(r.body.error, 'No hay una versión anterior exitosa para volver');
+  });
+
   test('listar y ver el detalle', async () => {
     const lista = await api('GET', '/applications?search=ordenes', { session: s });
     assert.equal(lista.status, 200);
