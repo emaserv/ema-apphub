@@ -131,3 +131,21 @@ describe('creación y listados generales', () => {
     assert.equal((await api('GET', '/databases', { session: devS })).status, 200);
   });
 });
+
+describe('aviso de puerto ocupado', () => {
+  test('a un usuario limitado no le dice qué aplicación usa el puerto; a un Admin sí', async () => {
+    await one(`UPDATE application_environments SET external_port=8177 WHERE application_id=$1 RETURNING id`, [appA]);
+    const limitado = await api('GET', '/system/ports/check?port=8177', { session: devS });
+    assert.equal(limitado.body.free, false);
+    assert.equal(limitado.body.reason, 'El puerto 8177 ya está asignado a otra aplicación');
+    const deAdmin = await api('GET', '/system/ports/check?port=8177', { session: admin });
+    assert.match(deAdmin.body.reason, /App Alfa/);
+  });
+
+  test('al crear una app con un puerto ocupado, el error tampoco nombra la otra app', async () => {
+    const r = await api('POST', '/applications', { session: devS, body: newApp('App Choque', { environment: { name: 'development', externalPort: 8177 } }) });
+    assert.equal(r.status, 409);
+    assert.doesNotMatch(r.body.error, /App Alfa/);
+  });
+});
+

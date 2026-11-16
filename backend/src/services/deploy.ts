@@ -142,8 +142,9 @@ async function deployVersion(
 
   await log.step('validate', 'Validando configuración');
   if (!version.dockerfile.trim()) throw new Error('El Dockerfile está vacío');
-  if (env.external_port) await assertPortFree(env.external_port, env.id, container);
-  for (const p of env.extra_ports || []) await assertPortFree(p.external, env.id, container);
+  // El log del deploy lo lee cualquiera con acceso a la app: no se nombra la app o el contenedor que ocupa el puerto
+  if (env.external_port) await assertPortFree(env.external_port, env.id, container, false);
+  for (const p of env.extra_ports || []) await assertPortFree(p.external, env.id, container, false);
   await dk.ensureNetwork();
   await dk.composeValidate(dir, container);
   log.line('docker-compose.yml válido');

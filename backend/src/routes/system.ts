@@ -67,7 +67,7 @@ system.get('/system/ports/check', requirePerm('apps.view'), ah(async (req, res) 
   const port = Number(req.query.port);
   if (!port) return res.json({ suggested: await nextFreePort() });
   try {
-    await assertPortFree(port, (req.query.environmentId as string) || null);
+    await assertPortFree(port, (req.query.environmentId as string) || null, undefined, req.user!.seesAllApps);
     res.json({ port, free: true });
   } catch (e: any) {
     res.json({ port, free: false, reason: e.message, suggested: await nextFreePort() });

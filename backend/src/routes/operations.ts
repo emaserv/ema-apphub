@@ -170,7 +170,7 @@ r.post('/applications/:id/environments', requirePerm('apps.edit'), ah(async (req
   const env = await createEnvironment(app, {
     name: b.name, externalPort: b.externalPort === undefined ? await nextFreePort() : b.externalPort, internalPort: b.internalPort,
     domain: b.domain, httpsEnabled: b.httpsEnabled, volumes: b.volumes, memoryLimitMb: b.memoryLimitMb, cpuLimit: b.cpuLimit,
-  }, false);
+  }, false, req.user!.seesAllApps);
   if (b.copyVariablesFrom) {
     const src = await getEnv(app.id, b.copyVariablesFrom);
     await q(`INSERT INTO environment_variables (environment_id, key, value, value_enc, is_secret)
@@ -184,8 +184,8 @@ r.put('/applications/:id/environments/:name', requirePerm('apps.edit'), ah(async
   const app = await getApp(req.params.id);
   const env = await getEnv(app.id, req.params.name);
   const b = parse(ENV_UPDATE, req.body);
-  if (b.externalPort) await assertPortFree(b.externalPort, env.id, envProject(app, env));
-  for (const p of b.extraPorts ?? []) await assertPortFree(p.external, env.id, envProject(app, env));
+  if (b.externalPort) await assertPortFree(b.externalPort, env.id, envProject(app, env), req.user!.seesAllApps);
+  for (const p of b.extraPorts ?? []) await assertPortFree(p.external, env.id, envProject(app, env), req.user!.seesAllApps);
   b.volumes?.forEach(validateVolume);
   if (b.domain) {
     const d = await one(`SELECT 1 FROM application_environments WHERE lower(domain)=lower($1) AND id<>$2`, [b.domain, env.id]);
