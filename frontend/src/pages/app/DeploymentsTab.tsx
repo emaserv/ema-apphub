@@ -4,7 +4,7 @@ import DeploymentLog from '../../components/DeploymentLog';
 import { Empty, Spinner, StatusBadge, useData } from '../../components/ui';
 import { TabProps } from './OverviewTab';
 
-const TRIGGER: Record<string, string> = { manual: 'Manual', git: 'Git', webhook: 'Webhook', rollback: 'Rollback', auto_rollback: 'Rollback automático', clone: 'Clonación', restore: 'Restauración' };
+const TRIGGER: Record<string, string> = { manual: 'Manual', git: 'Git', webhook: 'Webhook', rollback: 'Rollback', auto_rollback: 'Rollback automático', clone: 'Clonación', restore: 'Restauración', promote: 'Pase de ambiente' };
 
 export default function DeploymentsTab({ app, reload, focus }: TabProps & { focus?: string | null }) {
   const { data, reload: reloadList } = useData<any[]>(() => api(`/applications/${app.id}/deployments`), [app.id], 5000);
@@ -22,7 +22,7 @@ export default function DeploymentsTab({ app, reload, focus }: TabProps & { focu
                 <tr key={d.id} className="click" style={sel === d.id ? { background: 'var(--ema-sky-100)' } : undefined} onClick={() => setSel(d.id)}>
                   <td className="small nowrap">{fmtDate(d.created_at)}<div className="muted">{d.user_name ?? TRIGGER[d.trigger]}</div></td>
                   <td><b>v{d.version}</b>{d.previous_version && <div className="muted small">desde v{d.previous_version}</div>}</td>
-                  <td><span className="badge sky">{ENV_LABEL[d.environment]}</span><div className="muted small">{TRIGGER[d.trigger]}</div></td>
+                  <td><span className="badge sky">{ENV_LABEL[d.environment]}</span><div className="muted small">{d.promoted_from ? `Desde ${ENV_LABEL[d.promoted_from]}` : TRIGGER[d.trigger]}</div></td>
                   <td><StatusBadge status={d.status} /></td>
                 </tr>
               ))}

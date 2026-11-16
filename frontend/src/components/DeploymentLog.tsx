@@ -42,6 +42,7 @@ export default function DeploymentLog({ id, onDone }: { id: string; onDone?: (st
       <div className="row between">
         <div className="row">
           <b>{d.application_name}</b><span className="badge sky">{ENV_LABEL[d.environment] ?? d.environment}</span><span className="badge">v{d.version}</span>
+          {d.promoted_from && <span className="badge">desde {ENV_LABEL[d.promoted_from] ?? d.promoted_from}</span>}
           <StatusBadge status={d.status} />
         </div>
         <span className="muted small">{fmtDate(d.created_at)} · {d.user_name ?? d.trigger}</span>
