@@ -99,16 +99,20 @@ export async function hostPortsInUse(): Promise<Map<number, string>> {
   return used;
 }
 
-/** Verifica que un puerto externo no esté asignado a otro ambiente ni usado por otro contenedor. */
-export async function assertPortFree(port: number, envId?: string | null, ownContainer?: string) {
+/**
+ * Verifica que un puerto externo no esté asignado a otro ambiente ni usado por otro contenedor.
+ * Con `revealOwner = false` el error no nombra la app ni el contenedor que lo ocupa: es para usuarios
+ * limitados a sus apps asignadas (no deben enterarse de que existen otras) y para el log de deploy, que lee cualquiera con acceso a la app.
+ */
+export async function assertPortFree(port: number, envId?: string | null, ownContainer?: string, revealOwner = true) {
   const reserved = [22, 80, 443, Number(process.env.PLATFORM_HTTP_PORT || 0), Number(process.env.TRAEFIK_DASHBOARD_PORT || 0)].filter(Boolean);
   if (reserved.includes(port)) throw conflict(`El puerto ${port} está reservado por la plataforma`);
   const other = await one(`SELECT e.name, a.name AS app FROM application_environments e JOIN applications a ON a.id=e.application_id
                            WHERE e.external_port=$1 AND ($2::uuid IS NULL OR e.id <> $2)`, [port, envId ?? null]);
-  if (other) throw conflict(`El puerto ${port} ya está asignado a ${other.app} (${other.name})`);
+  if (other) throw conflict(revealOwner ? `El puerto ${port} ya está asignado a ${other.app} (${other.name})` : `El puerto ${port} ya está asignado a otra aplicación`);
   const used = await hostPortsInUse();
   const by = used.get(port);
-  if (by && by !== ownContainer) throw conflict(`El puerto ${port} está en uso por el contenedor ${by}`);
+  if (by && by !== ownContainer) throw conflict(revealOwner ? `El puerto ${port} está en uso por el contenedor ${by}` : `El puerto ${port} ya está en uso en el servidor`);
 }
 
 export async function nextFreePort(): Promise<number> {

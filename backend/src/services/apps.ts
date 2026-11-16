@@ -122,9 +122,10 @@ export interface EnvInput {
   cpuLimit?: number | null;
 }
 
-export async function createEnvironment(app: AppRow, e: EnvInput, isDefault: boolean): Promise<EnvRow> {
+/** `revealOwner`: si el error de puerto ocupado puede nombrar la app que lo usa (ver assertPortFree). */
+export async function createEnvironment(app: AppRow, e: EnvInput, isDefault: boolean, revealOwner = true): Promise<EnvRow> {
   const port = e.externalPort === undefined ? await nextFreePort() : e.externalPort;
-  if (port) await assertPortFree(port);
+  if (port) await assertPortFree(port, null, undefined, revealOwner);
   for (const v of e.volumes ?? []) validateVolume(v);
   const env = await one<EnvRow>(
     `INSERT INTO application_environments (application_id, name, is_default, internal_port, external_port, domain, https_enabled, volumes, memory_limit_mb, cpu_limit)
@@ -168,7 +169,10 @@ export interface CreateAppInput {
   registryId?: string | null;
 }
 
-export async function createApplication(input: CreateAppInput, user: { id: string; username: string }) {
+/** Quien crea la app. `seesAllApps = false` (usuario limitado a sus apps): los errores no nombran otras aplicaciones. */
+export interface AppCreator { id: string; username: string; seesAllApps?: boolean }
+
+export async function createApplication(input: CreateAppInput, user: AppCreator) {
   const slug = slugify(input.slug || input.name);
   if (slug.length < 3) throw badRequest('El identificador debe tener al menos 3 caracteres');
   if (await one(`SELECT 1 FROM applications WHERE slug=$1`, [slug])) throw conflict(`Ya existe una aplicación con identificador "${slug}"`);
@@ -184,7 +188,7 @@ export async function createApplication(input: CreateAppInput, user: { id: strin
   fs.mkdirSync(paths.app(slug), { recursive: true });
 
   try {
-    const env = await createEnvironment(app, input.environment, true);
+    const env = await createEnvironment(app, input.environment, true, user.seesAllApps ?? true);
 
     if (input.repository?.url) await saveRepository(app.id, input.repository);
 
@@ -278,7 +282,7 @@ export interface CloneInput {
   deploy?: boolean;
 }
 
-export async function cloneApplication(src: AppRow, input: CloneInput, user: { id: string; username: string }) {
+export async function cloneApplication(src: AppRow, input: CloneInput, user: AppCreator) {
   const srcEnv = input.sourceEnvironment
     ? await one<EnvRow>(`SELECT * FROM application_environments WHERE application_id=$1 AND name=$2`, [src.id, input.sourceEnvironment])
     : await one<EnvRow>(`SELECT * FROM application_environments WHERE application_id=$1 ORDER BY is_default DESC LIMIT 1`, [src.id]);
