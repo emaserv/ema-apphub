@@ -1,7 +1,7 @@
 import fs from 'fs';
 import multer from 'multer';
 import path from 'path';
-import { Request } from 'express';
+import type { Req } from '../lib/http';
 import { config, paths } from '../config';
 import { getApp, getEnv } from '../services/core';
 
@@ -20,7 +20,7 @@ export const upload = multer({
 });
 
 /** Resuelve aplicación (:id) y ambiente (?environment= / body.environment). */
-export async function ctx(req: Request) {
+export async function ctx(req: Req) {
   const app = await getApp(req.params.id);
   const envName = (req.query.environment as string) || req.body?.environment || null;
   const env = await getEnv(app.id, envName);

@@ -28,6 +28,8 @@ export function createApp() {
   }));
   if (config.corsOrigins.length) app.use(cors({ origin: config.corsOrigins, credentials: true }));
   app.use(express.json({ limit: '5mb', verify: (req: any, _res, buf) => { if (req.url?.startsWith('/api/webhooks')) req.rawBody = buf; } }));
+  // Express 5 deja req.body en undefined si el pedido no trae cuerpo (el frontend hace muchos POST así); las rutas esperan {}
+  app.use((req, _res, next) => { req.body ??= {}; next(); });
   app.use(cookieParser());
   app.use('/api', rateLimit({ windowMs: 60_000, limit: Number(process.env.RATE_LIMIT_PER_MIN || 600), standardHeaders: true, legacyHeaders: false }));
 
