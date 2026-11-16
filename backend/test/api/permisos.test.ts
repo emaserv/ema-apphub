@@ -21,6 +21,8 @@ const CASOS: Caso[] = [
   { nombre: 'ver variables de entorno', method: 'GET', path: (id) => `/applications/${id}/env`, permitido: ['superadmin', 'admin', 'developer'], ok: 200 },
   { nombre: 'modificar variables de entorno', method: 'PUT', path: (id) => `/applications/${id}/env`, body: {}, permitido: ['superadmin', 'admin'], ok: 400 },
   { nombre: 'desplegar en producción', method: 'POST', path: (id) => `/applications/${id}/deploy`, body: { environment: 'production' }, permitido: ['superadmin', 'admin'], ok: 400 },
+  // La app de prueba no tiene ambiente Test: quien tiene permiso recibe 404 (ambiente no encontrado)
+  { nombre: 'pasar una versión a producción', method: 'POST', path: (id) => `/applications/${id}/promote`, body: { from: 'test', to: 'production' }, permitido: ['superadmin', 'admin'], ok: 404 },
   { nombre: 'listar usuarios', method: 'GET', path: () => '/users', permitido: ['superadmin'], ok: 200 },
   { nombre: 'crear usuario', method: 'POST', path: () => '/users', body: {}, permitido: ['superadmin'], ok: 400 },
   { nombre: 'ver auditoría', method: 'GET', path: () => '/audit', permitido: ['superadmin', 'admin'], ok: 200 },

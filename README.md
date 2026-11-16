@@ -22,6 +22,7 @@ Plataforma interna de **EMA Servicios** para registrar, almacenar, versionar, co
 * **Puertos** con detección de conflictos, **volúmenes** persistentes, límites de CPU/RAM.
 * **Ciclo de vida real de contenedores**: deploy, iniciar, detener, reiniciar, recrear, eliminar.
 * **Versionado** completo (código + Dockerfile + compose + variables + commit + comentario) y **rollback** a cualquier versión; **rollback automático** si el deploy falla.
+* **Pase entre ambientes** ("Pasar a…"): despliega en otro ambiente (ej. Test → Producción) exactamente la misma imagen que funciona en el de origen, sin recompilar. Si la versión se modificó o la imagen cambió desde que se probó, el pase se rechaza.
 * **Pipeline CI/CD**: código → validación → build → tests → imagen (push opcional a registry) → deploy → health check.
 * **Health checks** periódicos por HTTP.
 * **Avisos** (campanita) para los superadministradores: deploy fallido, app caída (2 health checks seguidos) y recuperada, backup programado fallido y vulnerabilidades críticas en una imagen. Se borran a los 90 días.

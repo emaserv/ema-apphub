@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
-  Archive, ArrowLeft, Boxes, Container, Database, ExternalLink, FileCode2, GitBranch, History, LayoutDashboard, Play, Plus, RotateCcw,
+  Archive, ArrowLeft, ArrowRightLeft, Boxes, Container, Database, ExternalLink, FileCode2, GitBranch, History, LayoutDashboard, Play, Plus, RotateCcw,
   RotateCw, Rocket, ScrollText, Settings2, Square, SquareTerminal, Variable, Wrench,
 } from 'lucide-react';
 import { api, ENV_LABEL, ENV_ORDER } from '../api/client';
@@ -34,6 +34,7 @@ export default function ApplicationDetail() {
   const [logService, setLogService] = useState<'app' | 'db'>('app');
   const [confirm, setConfirm] = useState<null | { action: string; label: string }>(null);
   const [newEnv, setNewEnv] = useState(false);
+  const [promote, setPromote] = useState(false);
 
   useEffect(() => {
     if (app && (!envName || !app.environments.some((e: any) => e.name === envName))) setEnvName(app.environments.find((e: any) => e.is_default)?.name ?? app.environments[0]?.name);
@@ -44,6 +45,11 @@ export default function ApplicationDetail() {
   const env = app.environments.find((e: any) => e.name === envName) ?? app.environments[0];
   const setTab = (t: TabId) => { params.set('tab', t); params.delete('dep'); setParams(params, { replace: true }); };
   const canDeploy = can(env.name === 'production' ? 'apps.deploy.prod' : 'apps.deploy.nonprod');
+  const canDeployTo = (name: string) => can(name === 'production' ? 'apps.deploy.prod' : 'apps.deploy.nonprod');
+  // El botón se muestra siempre que haya una versión funcionando; si no hay destino posible, el modal explica por qué
+  const canPromote = env.status === 'running' && !!env.deployed_version_id && ENV_ORDER.some((n) => n !== env.name && canDeployTo(n));
+  const promoteTargets = canPromote
+    ? app.environments.filter((e: any) => e.name !== env.name && e.deployed_version_id !== env.deployed_version_id && canDeployTo(e.name)) : [];
   const healthStatus = env.status === 'running' ? (env.health_status === 'unhealthy' ? 'unhealthy' : 'running') : env.status;
 
   const doAction = (action: string, label: string) => run(async () => {
@@ -68,6 +74,8 @@ export default function ApplicationDetail() {
             ? <button className="btn outline" disabled={busy} onClick={() => doAction('start', 'Iniciar')}><Play size={15} />Iniciar</button>
             : <button className="btn outline" disabled={busy} onClick={() => setConfirm({ action: 'stop', label: 'Detener' })}><Square size={15} />Detener</button>)}
           {can('apps.operate') && env.deployed_version_id && <button className="btn outline" disabled={busy} onClick={() => doAction('restart', 'Reiniciar')}><RotateCw size={15} />Reiniciar</button>}
+          {canPromote && <button className="btn outline" disabled={busy} onClick={() => setPromote(true)}
+            title="Desplegar en otro ambiente la misma imagen que corre acá, sin recompilar"><ArrowRightLeft size={15} />Pasar a…</button>}
           {canDeploy && env.deployed_version_id && <button className="btn outline" disabled={busy} onClick={() => setConfirm({ action: 'rollback', label: 'Rollback' })}><RotateCcw size={15} />Rollback</button>}
           {canDeploy && app.current_version && <button className="btn primary" disabled={busy || env.status === 'deploying'} onClick={() => doAction('deploy', 'Deploy')}><Rocket size={15} />Deploy</button>}
         </div>
@@ -132,6 +140,11 @@ export default function ApplicationDetail() {
           text={confirm.action === 'stop' ? `Se detendrá ${app.name} en ${ENV_LABEL[env.name]}. Los usuarios no podrán acceder.` : `Se volverá a la última versión exitosa anterior a v${env.deployed_version}.`}
           onConfirm={() => doAction(confirm.action, confirm.label)} onClose={() => setConfirm(null)} />
       )}
+      {promote && <PromoteModal app={app} source={env} targets={promoteTargets} canCreateEnv={can('apps.edit') && app.environments.length < 4}
+        onNewEnv={() => { setPromote(false); setNewEnv(true); }} onClose={() => setPromote(false)} onDone={(target, depId) => {
+        setPromote(false); setEnvName(target); void reload();
+        params.set('env', target); params.set('tab', 'deployments'); params.set('dep', depId); setParams(params);
+      }} />}
       {newEnv && <NewEnvModal app={app} onClose={() => setNewEnv(false)} onCreated={(n) => { setNewEnv(false); setEnvName(n); void reload(); }} />}
     </>
   );
@@ -154,6 +167,63 @@ function NewEnvModal({ app, onClose, onCreated }: { app: any; onClose: () => voi
         <label className="field">Copiar variables desde<select className="input" value={copy} onChange={(e) => setCopy(e.target.value)}><option value="">— No copiar —</option>{app.environments.map((e: any) => <option key={e.name} value={e.name}>{ENV_LABEL[e.name]}</option>)}</select></label>
         <label className="field">Dominio (opcional)<input className="input mono" value={domain} onChange={(e) => setDomain(e.target.value.trim().toLowerCase())} placeholder={`${app.slug}-${name}.emaservicios.com.ar`} /></label>
         <p className="muted small" style={{ margin: 0 }}>Se asignará un puerto externo libre automáticamente. Cada ambiente tiene su propio contenedor, variables, base de datos, puerto y dominio.</p>
+      </div>
+    </Modal>
+  );
+}
+
+/** Pasar la versión que corre en `source` a otro ambiente con la misma imagen (sin recompilar). */
+function PromoteModal({ app, source, targets, canCreateEnv, onNewEnv, onClose, onDone }: {
+  app: any; source: any; targets: any[]; canCreateEnv: boolean; onNewEnv: () => void; onClose: () => void; onDone: (target: string, depId: string) => void;
+}) {
+  if (!targets.length) {
+    const single = app.environments.length === 1;
+    return (
+      <Modal title={`Pasar v${source.deployed_version} de ${ENV_LABEL[source.name]} a otro ambiente`} onClose={onClose} footer={<>
+        <button className="btn outline" onClick={onClose}>Cerrar</button>
+        {canCreateEnv && <button className="btn primary" onClick={onNewEnv}><Plus size={14} />Crear ambiente</button>}</>}>
+        <p style={{ margin: 0 }}>
+          {single
+            ? <>Esta aplicación tiene un solo ambiente ({ENV_LABEL[source.name]}). Para pasar versiones, primero cree otro (por ejemplo Test o Producción) con <b>+ Ambiente</b>.</>
+            : <>No hay ambientes a los que pasar esta versión: los demás ya tienen v{source.deployed_version} o usted no tiene permiso para desplegar en ellos.</>}
+        </p>
+      </Modal>
+    );
+  }
+  return <PromoteForm app={app} source={source} targets={targets} onClose={onClose} onDone={onDone} />;
+}
+
+function PromoteForm({ app, source, targets, onClose, onDone }: {
+  app: any; source: any; targets: any[]; onClose: () => void; onDone: (target: string, depId: string) => void;
+}) {
+  const sorted = [...targets].sort((a, b) => ENV_ORDER.indexOf(a.name) - ENV_ORDER.indexOf(b.name));
+  // Por defecto, el siguiente ambiente "hacia Producción" (Desarrollo → Test → Staging → Producción)
+  const next = sorted.find((e) => ENV_ORDER.indexOf(e.name) > ENV_ORDER.indexOf(source.name)) ?? sorted[0];
+  const [to, setTo] = useState<string>(next.name);
+  const { run, busy } = useAction();
+  const target = sorted.find((e) => e.name === to)!;
+  return (
+    <Modal title={`Pasar v${source.deployed_version} de ${ENV_LABEL[source.name]} a otro ambiente`} onClose={onClose} footer={<>
+      <button className="btn outline" onClick={onClose}>Cancelar</button>
+      <button className="btn primary" disabled={busy} onClick={() => run(async () => {
+        const dep = await api(`/applications/${app.id}/promote`, { body: { from: source.name, to } });
+        onDone(to, dep.id);
+      }, 'Pase solicitado')}>{busy && <span className="spinner" />}Pasar a {ENV_LABEL[to]}</button></>}>
+      <div className="stack">
+        <label className="field">Ambiente de destino
+          <select className="input" value={to} onChange={(e) => setTo(e.target.value)}>
+            {sorted.map((e) => <option key={e.name} value={e.name}>{ENV_LABEL[e.name]}{e.deployed_version ? ` (hoy tiene v${e.deployed_version})` : ' (sin deploys)'}</option>)}
+          </select>
+        </label>
+        <p style={{ margin: 0 }}>
+          Se va a desplegar en <b>{ENV_LABEL[to]}</b> exactamente la misma imagen de <b>v{source.deployed_version}</b> que funciona en {ENV_LABEL[source.name]},
+          sin volver a compilarla.{target.deployed_version && <> Reemplaza a v{target.deployed_version}; si el deploy falla, vuelve sola a esa versión.</>}
+        </p>
+        <p className="muted small" style={{ margin: 0 }}>
+          Las variables, la base de datos, el puerto y el dominio de {ENV_LABEL[to]} no cambian.
+          {to === 'production' && ' En Producción se vuelve a escanear la imagen y se bloquea si tiene vulnerabilidades críticas.'}
+        </p>
+        {source.health_status === 'unhealthy' && <div className="alert warn">{ENV_LABEL[source.name]} está fallando el health check: revise que la versión funcione antes de pasarla.</div>}
       </div>
     </Modal>
   );

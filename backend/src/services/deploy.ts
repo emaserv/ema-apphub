@@ -13,7 +13,7 @@ import { deployFailedNotice, notify, vulnerableImageNotice } from './notify';
 import { ScanSummary, blockMessage, formatScan, parseTrivyReport, scanDecision } from './scan';
 import { writeSupportFiles } from './templates';
 
-type Trigger = 'manual' | 'git' | 'webhook' | 'rollback' | 'auto_rollback' | 'clone' | 'restore';
+type Trigger = 'manual' | 'git' | 'webhook' | 'rollback' | 'auto_rollback' | 'clone' | 'restore' | 'promote';
 
 /** Acumula líneas de log y las persiste en lote (evita miles de UPDATE durante un build). */
 class DeployLog {
@@ -50,14 +50,18 @@ export interface DeployRequest {
   username?: string;
   autoRollback?: boolean;
   forceRebuild?: boolean;
+  /** Promoción: la imagen debe ser exactamente esta (la que corre en el ambiente de origen); nunca se recompila. */
+  expectedImageId?: string;
+  /** Promoción: ambiente de origen, para el historial. */
+  promotedFrom?: string;
 }
 
 export async function enqueueDeploy(r: DeployRequest) {
   const env = await one<EnvRow>(`SELECT * FROM application_environments WHERE id=$1`, [r.envId]);
   const dep = await one(
-    `INSERT INTO deployments (application_id, environment_id, version_id, previous_version_id, trigger, created_by)
-     VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
-    [r.appId, r.envId, r.versionId, env?.deployed_version_id ?? null, r.trigger ?? 'manual', r.userId ?? null],
+    `INSERT INTO deployments (application_id, environment_id, version_id, previous_version_id, trigger, created_by, promoted_from)
+     VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
+    [r.appId, r.envId, r.versionId, env?.deployed_version_id ?? null, r.trigger ?? 'manual', r.userId ?? null, r.promotedFrom ?? null],
   );
   const prev = chains.get(r.envId) ?? Promise.resolve();
   const next = prev.then(() => runDeployment(dep.id, r)).catch((e) => console.error('[deploy]', e));
@@ -85,7 +89,6 @@ export function planImage(o: { imageExists: boolean; sourceExists: boolean; forc
   return o.sourceExists ? 'build' : 'missing';
 }
 
-/** Prepara archivos, construye (o reutiliza) la imagen y levanta el ambiente. */
 /** Escanea la imagen antes de publicarla y levantarla. Ver reglas en services/scan.ts. */
 async function scanStep(app: AppRow, env: EnvRow, version: VersionRow, image: string, log: DeployLog, trigger?: Trigger) {
   await log.step('scan', 'Escaneando vulnerabilidades (Trivy)');
@@ -104,7 +107,11 @@ async function scanStep(app: AppRow, env: EnvRow, version: VersionRow, image: st
   }
 }
 
-async function deployVersion(app: AppRow, env: EnvRow, version: VersionRow, log: DeployLog, opts: { forceRebuild?: boolean; trigger?: Trigger }) {
+/** Prepara archivos, construye (o reutiliza) la imagen y levanta el ambiente. Devuelve el ID de la imagen que quedó corriendo. */
+async function deployVersion(
+  app: AppRow, env: EnvRow, version: VersionRow, log: DeployLog,
+  opts: { forceRebuild?: boolean; trigger?: Trigger; expectedImageId?: string },
+): Promise<string | null> {
   const image = imageTag(app.slug, version.version);
   const container = envProject(app, env);
 
@@ -118,6 +125,9 @@ async function deployVersion(app: AppRow, env: EnvRow, version: VersionRow, log:
     dirty: !!version.build_config?.dirty,
     pushedToRegistry: !!reg && !!(await one(`SELECT 1 FROM docker_images WHERE version_id=$1 AND pushed`, [version.id])),
   });
+  if (opts.expectedImageId && (plan === 'build' || plan === 'missing')) {
+    throw new Error(`La imagen de ${version.version} que se probó ya no está disponible o la versión se modificó: no se promueve para no desplegar algo distinto de lo probado. Haga un deploy normal.`);
+  }
   if (plan === 'missing') {
     throw new Error(`No existe el código de la versión en ${version.source_path} ni una imagen para reutilizar: vuelva a subir el código de esta versión.`);
   }
@@ -156,6 +166,13 @@ async function deployVersion(app: AppRow, env: EnvRow, version: VersionRow, log:
     if (version.build_config?.dirty) await q(`UPDATE application_versions SET build_config = build_config - 'dirty' WHERE id=$1`, [version.id]);
     log.line('Imagen construida');
   }
+  const imageId = (await dk.imageInfo(image))?.id ?? null;
+  if (opts.expectedImageId) {
+    if (imageId !== opts.expectedImageId) {
+      throw new Error(`La imagen de ${version.version} cambió desde que se probó (se recompiló): no se promueve. Vuelva a desplegarla y probarla en el ambiente de origen.`);
+    }
+    log.line(`Misma imagen que la probada (${imageId.replace('sha256:', '').slice(0, 12)}): no se recompila`);
+  }
 
   const bc = { ...(app.build_config || {}), ...(version.build_config || {}) };
   if (bc.runTests && bc.testCommand) {
@@ -179,6 +196,7 @@ async function deployVersion(app: AppRow, env: EnvRow, version: VersionRow, log:
 
   await log.step('health', 'Verificando salud de la aplicación');
   await waitHealthy(app, env, log);
+  return imageId;
 }
 
 export async function probe(app: AppRow, env: EnvRow): Promise<{ ok: boolean; status?: number; ms: number; error?: string }> {
@@ -224,13 +242,14 @@ async function runDeployment(depId: string, r: DeployRequest) {
   await setEnvStatus(env.id, 'deploying');
   const user = r.userId ? { id: r.userId, username: r.username ?? '' } : null;
   try {
-    await deployVersion(app, env, version, log, { forceRebuild: r.forceRebuild, trigger: r.trigger });
+    const imageId = await deployVersion(app, env, version, log, { forceRebuild: r.forceRebuild, trigger: r.trigger, expectedImageId: r.expectedImageId });
+    await q(`UPDATE deployments SET image_id=$2 WHERE id=$1`, [depId, imageId]);
     await setEnvStatus(env.id, 'running', { deployed_version_id: version.id, health_status: 'healthy', health_checked_at: new Date().toISOString() });
     if (env.is_default) await q(`UPDATE applications SET current_version_id=$2, updated_at=now() WHERE id=$1`, [app.id, version.id]);
     log.line(`✔ Deploy exitoso: ${app.name} ${version.version} en ${env.name}`);
     await log.close();
     await q(`UPDATE deployments SET status='success', current_step='done', finished_at=now() WHERE id=$1`, [depId]);
-    await audit(null, { action: 'deploy', entityType: 'deployment', entityId: depId, app, details: { version: version.version, environment: env.name, trigger: r.trigger } }, user);
+    await audit(null, { action: 'deploy', entityType: 'deployment', entityId: depId, app, details: { version: version.version, environment: env.name, trigger: r.trigger, from: r.promotedFrom } }, user);
   } catch (e: any) {
     const msg = String(e?.message || e);
     log.line(`✖ ERROR: ${msg}`);

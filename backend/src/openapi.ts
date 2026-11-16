@@ -23,6 +23,7 @@ const S = {
   analyze: { type: 'object', description: 'multipart/form-data: method=zip + file, method=files + files[] + paths[]; o JSON method=git + git{url,branch,...}' },
   envOnly: { type: 'object', properties: { environment: { type: 'string' } } },
   deploy: { type: 'object', properties: { environment: { type: 'string' }, versionId: { type: 'string', format: 'uuid' }, forceRebuild: { type: 'boolean' } } },
+  promote: { type: 'object', required: ['from', 'to'], properties: { from: { type: 'string' }, to: { type: 'string' } } },
   vars: { type: 'object', properties: { variables: { type: 'array', items: { type: 'object', properties: { key: { type: 'string' }, value: { type: 'string' }, isSecret: { type: 'boolean' } } } } } },
   backup: { type: 'object', properties: { environment: { type: 'string' }, type: { type: 'string', enum: ['app', 'database', 'both'] }, notes: { type: 'string' } } },
 };
@@ -59,6 +60,7 @@ const routes: Route[] = [
 
   ['post', '/applications/:id/deploy', 'Despliegue', 'Desplegar versión en un ambiente (pipeline asíncrono)', 'apps.deploy.*', S.deploy],
   ['post', '/applications/:id/rollback', 'Despliegue', 'Volver a una versión anterior', 'apps.deploy.*', S.deploy],
+  ['post', '/applications/:id/promote', 'Despliegue', 'Pasar a otro ambiente la misma imagen que corre en el de origen, sin recompilar', 'apps.deploy.*', S.promote],
   ['post', '/applications/:id/start', 'Despliegue', 'Iniciar', 'apps.operate', S.envOnly],
   ['post', '/applications/:id/stop', 'Despliegue', 'Detener', 'apps.operate', S.envOnly],
   ['post', '/applications/:id/restart', 'Despliegue', 'Reiniciar', 'apps.operate', S.envOnly],

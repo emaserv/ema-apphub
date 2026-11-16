@@ -14,6 +14,7 @@ import {
   appUrl, assertPortFree, currentImageFor, envProject, getApp, getEnv, getVersion, imageTag, listVars, nextFreePort, upsertVar, writeEnvFiles,
 } from '../services/core';
 import { enqueueDeploy, lifecycle, teardown } from '../services/deploy';
+import { promotionError } from '../services/promote';
 import * as dk from '../services/docker';
 import { checkEnv } from '../services/monitor';
 import { generateCompose } from '../services/compose';
@@ -52,6 +53,30 @@ r.post('/applications/:id/rollback', ah(async (req, res) => {
   const v = await getVersion(app.id, versionId!);
   const dep = await enqueueDeploy({ appId: app.id, envId: env.id, versionId: v.id, trigger: 'rollback', userId: req.user!.id, username: req.user!.username, autoRollback: false });
   await audit(req, { action: 'rollback', entityType: 'deployment', entityId: dep.id, app, details: { environment: env.name, version: v.version } });
+  res.status(202).json(dep);
+}));
+
+/** Pasa a otro ambiente exactamente la imagen que corre en el de origen (ej. Test → Producción), sin recompilar. */
+r.post('/applications/:id/promote', ah(async (req, res) => {
+  const app = await getApp(req.params.id);
+  const b = parse(z.object({ from: ENV_NAME, to: ENV_NAME }), req.body);
+  assertDeployPerm(req.user, b.to);
+  const source = await getEnv(app.id, b.from);
+  const target = await getEnv(app.id, b.to);
+  const version = source.deployed_version_id ? await getVersion(app.id, source.deployed_version_id) : null;
+  const last = version && await one(
+    `SELECT image_id FROM deployments WHERE environment_id=$1 AND version_id=$2 AND status='success'
+      ORDER BY finished_at DESC LIMIT 1`, [source.id, version.id]);
+  const error = promotionError({
+    source, target, sourceImageId: last?.image_id ?? null,
+    versionDirty: !!version?.build_config?.dirty, versionLabel: version?.version ?? '',
+  });
+  if (error) throw badRequest(error);
+  const dep = await enqueueDeploy({
+    appId: app.id, envId: target.id, versionId: version!.id, trigger: 'promote', userId: req.user!.id, username: req.user!.username,
+    expectedImageId: last!.image_id, promotedFrom: source.name,
+  });
+  await audit(req, { action: 'promote', entityType: 'deployment', entityId: dep.id, app, details: { from: source.name, to: target.name, version: version!.version } });
   res.status(202).json(dep);
 }));
 
@@ -106,7 +131,7 @@ r.post('/applications/:id/healthcheck', requirePerm('apps.view'), ah(async (req,
 r.get('/applications/:id/deployments', requirePerm('apps.view'), ah(async (req, res) => {
   const app = await getApp(req.params.id);
   res.json(await q(
-    `SELECT d.id, d.status, d.trigger, d.current_step, d.error, d.created_at, d.started_at, d.finished_at,
+    `SELECT d.id, d.status, d.trigger, d.promoted_from, d.current_step, d.error, d.created_at, d.started_at, d.finished_at,
             e.name AS environment, v.version, pv.version AS previous_version, u.full_name AS user_name
        FROM deployments d JOIN application_environments e ON e.id=d.environment_id
        LEFT JOIN application_versions v ON v.id=d.version_id LEFT JOIN application_versions pv ON pv.id=d.previous_version_id
