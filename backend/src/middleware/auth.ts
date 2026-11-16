@@ -4,6 +4,7 @@ import jwt from 'jsonwebtoken';
 import { config } from '../config';
 import { one, q } from '../db/pool';
 import { HttpError } from '../lib/http';
+import { seesAllApps } from '../services/appAccess';
 import { closeUserSockets } from '../services/liveSockets';
 
 export interface AuthUser {
@@ -15,6 +16,8 @@ export interface AuthUser {
   roleName: string;
   permissions: string[];
   mustChangePassword: boolean;
+  /** Ve todas las aplicaciones (Superadmin/Admin, o marcado "Todas las aplicaciones"); si no, sólo las asignadas. */
+  seesAllApps: boolean;
 }
 
 declare global {
@@ -53,7 +56,7 @@ export function clearSession(res: Response) {
 /** Con `sessionVersion`, además exige que coincida con la del usuario (sesión no cerrada desde entonces). */
 export async function loadUser(userId: string, sessionVersion?: number): Promise<AuthUser | null> {
   const u = await one(
-    `SELECT u.id, u.username, u.full_name, u.email, u.active, u.must_change_password, u.session_version, r.code AS role, r.name AS role_name
+    `SELECT u.id, u.username, u.full_name, u.email, u.active, u.must_change_password, u.session_version, u.all_apps, r.code AS role, r.name AS role_name
        FROM users u JOIN roles r ON r.id = u.role_id WHERE u.id = $1`,
     [userId],
   );
@@ -67,7 +70,7 @@ export async function loadUser(userId: string, sessionVersion?: number): Promise
   return {
     id: u.id, username: u.username, fullName: u.full_name, email: u.email,
     role: u.role, roleName: u.role_name, permissions: perms.map((p) => p.code),
-    mustChangePassword: u.must_change_password,
+    mustChangePassword: u.must_change_password, seesAllApps: seesAllApps(u.role, u.all_apps),
   };
 }
 

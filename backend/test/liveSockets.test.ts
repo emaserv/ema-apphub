@@ -1,7 +1,8 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
-import { closeUserSockets, openSocketCount, SESSION_CLOSED_CODE, trackSocket } from '../src/services/liveSockets';
+import { closeUserSockets, openSocketCount, SESSION_CLOSED_CODE, setSocketApp, trackSocket } from '../src/services/liveSockets';
+import { seesAllApps } from '../src/services/appAccess';
 
 /** WebSocket de mentira: al cerrarlo registra el código y emite 'close', como el real. */
 class FakeSocket extends EventEmitter {
@@ -43,5 +44,31 @@ describe('liveSockets: cortar terminal y logs al cerrar sesión', () => {
 
   test('usuario sin sockets abiertos: no hace nada', () => {
     assert.equal(closeUserSockets('nadie'), 0);
+  });
+});
+
+describe('liveSockets: quitar el acceso a una aplicación', () => {
+  test('con appId corta sólo los sockets de esa app', () => {
+    const deA = new FakeSocket(), deB = new FakeSocket();
+    trackSocket('u5', deA); setSocketApp(deA, 'app-a');
+    trackSocket('u5', deB); setSocketApp(deB, 'app-b');
+    assert.equal(closeUserSockets('u5', 'Ya no tiene acceso a esta aplicación', 'app-a'), 1);
+    assert.deepEqual(deA.closedWith, { code: SESSION_CLOSED_CODE, reason: 'Ya no tiene acceso a esta aplicación' });
+    assert.equal(deB.closedWith, null);
+    assert.equal(openSocketCount('u5'), 1);
+    deB.close();
+  });
+});
+
+describe('seesAllApps: quién ve todas las aplicaciones', () => {
+  test('Superadmin y Admin siempre', () => {
+    assert.equal(seesAllApps('superadmin', false), true);
+    assert.equal(seesAllApps('admin', false), true);
+  });
+  test('Desarrollador y Consulta sólo con "Todas las aplicaciones"', () => {
+    assert.equal(seesAllApps('developer', false), false);
+    assert.equal(seesAllApps('viewer', false), false);
+    assert.equal(seesAllApps('developer', true), true);
+    assert.equal(seesAllApps('viewer', true), true);
   });
 });

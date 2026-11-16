@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
   Archive, ArrowLeft, ArrowRightLeft, Boxes, Container, Database, ExternalLink, FileCode2, GitBranch, History, LayoutDashboard, Play, Plus, RotateCcw,
-  RotateCw, Rocket, ScrollText, Settings2, Square, SquareTerminal, Variable, Wrench,
+  RotateCw, Rocket, ScrollText, Settings2, Square, SquareTerminal, UserCheck, Variable, Wrench,
 } from 'lucide-react';
 import { api, ENV_LABEL, ENV_ORDER } from '../api/client';
 import { useAuth } from '../auth';
@@ -19,8 +19,9 @@ import DatabaseTab from './app/DatabaseTab';
 import BackupsTab from './app/BackupsTab';
 import GitTab from './app/GitTab';
 import AdvancedTab from './app/AdvancedTab';
+import AccessTab from './app/AccessTab';
 
-export type TabId = 'overview' | 'versions' | 'deployments' | 'variables' | 'environment' | 'docker' | 'database' | 'logs' | 'terminal' | 'backups' | 'git' | 'advanced';
+export type TabId = 'overview' | 'versions' | 'deployments' | 'variables' | 'environment' | 'docker' | 'database' | 'logs' | 'terminal' | 'backups' | 'git' | 'access' | 'advanced';
 
 export default function ApplicationDetail() {
   const { id } = useParams();
@@ -106,6 +107,7 @@ export default function ApplicationDetail() {
         { id: 'terminal', label: 'Terminal', icon: <SquareTerminal size={15} />, hidden: !can('terminal.access') },
         { id: 'backups', label: 'Backups', icon: <Archive size={15} />, hidden: !can('backups.view') },
         { id: 'git', label: 'Git', icon: <GitBranch size={15} /> },
+        { id: 'access', label: 'Accesos', icon: <UserCheck size={15} />, hidden: !can('apps.access') },
         { id: 'advanced', label: 'Avanzado', icon: <Wrench size={15} /> },
       ]} />
 
@@ -133,6 +135,7 @@ export default function ApplicationDetail() {
       )}
       {tab === 'backups' && <BackupsTab {...props} />}
       {tab === 'git' && <GitTab {...props} />}
+      {tab === 'access' && <AccessTab {...props} />}
       {tab === 'advanced' && <AdvancedTab {...props} />}
 
       {confirm && (

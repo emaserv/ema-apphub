@@ -7,6 +7,7 @@ import { encrypt } from '../lib/crypto';
 import { ah, HttpError, notFound, parse } from '../lib/http';
 import { requirePerm } from '../middleware/auth';
 import { updateFromGit } from '../services/apps';
+import { visibleAppIds, visibleAppSlugs } from '../services/appAccess';
 import { audit } from '../services/audit';
 import { assertPortFree, getApp, getEnv, nextFreePort } from '../services/core';
 import * as dk from '../services/docker';
@@ -17,31 +18,36 @@ export const webhooks = Router();
 
 // ───────── dashboard ─────────
 
-system.get('/system/dashboard', requirePerm('apps.view'), ah(async (_req, res) => {
+system.get('/system/dashboard', requirePerm('apps.view'), ah(async (req, res) => {
+  // Desarrollador / Consulta: todo se cuenta sólo sobre sus aplicaciones asignadas ($1 = null: todas)
+  const ids = await visibleAppIds(req.user!);
+  const slugs = await visibleAppSlugs(req.user!);
   const [counts] = await q(`
     WITH main AS (
       SELECT DISTINCT ON (a.id) a.id, e.status, e.health_status
         FROM applications a LEFT JOIN application_environments e ON e.application_id=a.id
+       WHERE ($1::uuid[] IS NULL OR a.id = ANY($1))
        ORDER BY a.id, e.is_default DESC)
     SELECT count(*)::int AS total,
            count(*) FILTER (WHERE status='running' AND health_status <> 'unhealthy')::int AS running,
            count(*) FILTER (WHERE status IN ('stopped','not_deployed') OR status IS NULL)::int AS stopped,
            count(*) FILTER (WHERE status='error' OR (status='running' AND health_status='unhealthy'))::int AS error,
            count(*) FILTER (WHERE status='deploying')::int AS deploying
-      FROM main`);
-  const [other] = await q(`SELECT (SELECT count(*)::int FROM databases) AS databases,
-                                  (SELECT count(*)::int FROM application_environments WHERE deployed_version_id IS NOT NULL) AS environments,
-                                  (SELECT count(*)::int FROM deployments WHERE created_at > now() - interval '7 days') AS deployments_week,
-                                  (SELECT count(*)::int FROM deployments WHERE created_at > now() - interval '7 days' AND status='failed') AS failed_week,
-                                  (SELECT count(*)::int FROM backups WHERE created_at > now() - interval '7 days' AND status='success') AS backups_week`);
+      FROM main`, [ids]);
+  const [other] = await q(`SELECT (SELECT count(*)::int FROM databases WHERE ($1::uuid[] IS NULL OR application_id = ANY($1))) AS databases,
+                                  (SELECT count(*)::int FROM application_environments WHERE deployed_version_id IS NOT NULL AND ($1::uuid[] IS NULL OR application_id = ANY($1))) AS environments,
+                                  (SELECT count(*)::int FROM deployments WHERE created_at > now() - interval '7 days' AND ($1::uuid[] IS NULL OR application_id = ANY($1))) AS deployments_week,
+                                  (SELECT count(*)::int FROM deployments WHERE created_at > now() - interval '7 days' AND status='failed' AND ($1::uuid[] IS NULL OR application_id = ANY($1))) AS failed_week,
+                                  (SELECT count(*)::int FROM backups WHERE created_at > now() - interval '7 days' AND status='success' AND ($1::uuid[] IS NULL OR application_id = ANY($1))) AS backups_week`, [ids]);
   let containers = { total: 0, running: 0 };
   try {
-    const list = await dk.listManaged();
+    const list = (await dk.listManaged()).filter((c) => !slugs || slugs.has(c.Labels['ema.app']));
     containers = { total: list.length, running: list.filter((c) => c.State === 'running').length };
   } catch { /* docker no disponible */ }
   const recent = await q(`SELECT d.id, d.status, d.created_at, d.trigger, a.name AS application, a.id AS application_id, e.name AS environment, v.version
                             FROM deployments d JOIN applications a ON a.id=d.application_id JOIN application_environments e ON e.id=d.environment_id
-                            LEFT JOIN application_versions v ON v.id=d.version_id ORDER BY d.created_at DESC LIMIT 8`);
+                            LEFT JOIN application_versions v ON v.id=d.version_id
+                           WHERE ($1::uuid[] IS NULL OR a.id = ANY($1)) ORDER BY d.created_at DESC LIMIT 8`, [ids]);
   res.json({ applications: counts, ...other, containers, host: hostMetrics(), dockerOnline: await dk.ping(), recentDeployments: recent });
 }));
 
@@ -110,7 +116,8 @@ system.get('/deployments', requirePerm('apps.view'), ah(async (req, res) => {
             a.id AS application_id, a.name AS application_name, e.name AS environment, v.version, u.full_name AS user_name
        FROM deployments d JOIN applications a ON a.id=d.application_id JOIN application_environments e ON e.id=d.environment_id
        LEFT JOIN application_versions v ON v.id=d.version_id LEFT JOIN users u ON u.id=d.created_by
-      WHERE ($1::text IS NULL OR d.status=$1) ORDER BY d.created_at DESC LIMIT 300`, [(req.query.status as string) || null]));
+      WHERE ($1::text IS NULL OR d.status=$1) AND ($2::uuid[] IS NULL OR a.id = ANY($2))
+      ORDER BY d.created_at DESC LIMIT 300`, [(req.query.status as string) || null, await visibleAppIds(req.user!)]));
 }));
 
 system.get('/deployments/:did', requirePerm('apps.view'), ah(async (req, res) => {
@@ -118,8 +125,9 @@ system.get('/deployments/:did', requirePerm('apps.view'), ah(async (req, res) =>
     `SELECT d.*, a.name AS application_name, a.slug, e.name AS environment, v.version, pv.version AS previous_version, u.full_name AS user_name
        FROM deployments d JOIN applications a ON a.id=d.application_id JOIN application_environments e ON e.id=d.environment_id
        LEFT JOIN application_versions v ON v.id=d.version_id LEFT JOIN application_versions pv ON pv.id=d.previous_version_id
-       LEFT JOIN users u ON u.id=d.created_by WHERE d.id=$1`, [req.params.did]);
-  if (!d) throw notFound('Deployment no encontrado');
+       LEFT JOIN users u ON u.id=d.created_by WHERE d.id::text=$1`, [req.params.did]);
+  const ids = await visibleAppIds(req.user!);
+  if (!d || (ids && !ids.includes(d.application_id))) throw notFound('Deployment no encontrado');
   res.json(d);
 }));
 
@@ -128,7 +136,8 @@ system.get('/deployments/:did', requirePerm('apps.view'), ah(async (req, res) =>
 system.get('/docker/info', requirePerm('docker.view'), ah(async (_req, res) => res.json(await dk.info())));
 
 system.get('/docker/containers', requirePerm('docker.view'), ah(async (req, res) => {
-  const list = await dk.listManaged();
+  const slugs = await visibleAppSlugs(req.user!); // Desarrollador / Consulta: sólo contenedores de sus apps
+  const list = (await dk.listManaged()).filter((c) => !slugs || slugs.has(c.Labels['ema.app']));
   const withStats = req.query.stats === '1';
   res.json(await Promise.all(list.map(async (c) => ({
     id: c.Id.slice(0, 12), name: c.Names[0]?.replace(/^\//, ''), image: c.Image, state: c.State, status: c.Status, created: c.Created,
@@ -147,8 +156,9 @@ system.post('/docker/containers/:cid/:action', requirePerm('docker.manage'), ah(
   res.json({ ok: true });
 }));
 
-system.get('/docker/images', requirePerm('docker.view'), ah(async (_req, res) => {
-  const imgs = await dk.docker.listImages({ filters: { label: ['ema.managed=true'] } });
+system.get('/docker/images', requirePerm('docker.view'), ah(async (req, res) => {
+  const slugs = await visibleAppSlugs(req.user!);
+  const imgs = (await dk.docker.listImages({ filters: { label: ['ema.managed=true'] } })).filter((i) => !slugs || slugs.has(i.Labels?.['ema.app']));
   res.json(imgs.map((i) => ({ id: i.Id.replace('sha256:', '').slice(0, 12), tags: i.RepoTags, size: i.Size, created: i.Created, app: i.Labels?.['ema.app'], version: i.Labels?.['ema.version'] })));
 }));
 

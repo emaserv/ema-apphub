@@ -64,12 +64,16 @@ export async function login(username: string, password: string): Promise<Session
   return { cookie: pairs.join('; '), csrf };
 }
 
-/** Crea un usuario directo en la base (hash rápido: sólo para tests). */
-export async function createUser(role: Role, username = `${role}1`, password = 'Clave12345x') {
+/**
+ * Crea un usuario directo en la base (hash rápido: sólo para tests).
+ * Por defecto con "Todas las aplicaciones" (como los usuarios que existían antes de los permisos por app),
+ * así los tests de roles no dependen de asignaciones; `allApps: false` lo limita a sus apps asignadas.
+ */
+export async function createUser(role: Role, username = `${role}1`, password = 'Clave12345x', opts: { allApps?: boolean } = {}) {
   const u = await one(
-    `INSERT INTO users (username, email, full_name, password_hash, role_id, must_change_password)
-     VALUES ($1, $2, $3, $4, (SELECT id FROM roles WHERE code = $5), false) RETURNING id`,
-    [username, `${username}@test.local`, `Usuario ${role}`, await bcrypt.hash(password, 4), role],
+    `INSERT INTO users (username, email, full_name, password_hash, role_id, must_change_password, all_apps)
+     VALUES ($1, $2, $3, $4, (SELECT id FROM roles WHERE code = $5), false, $6) RETURNING id`,
+    [username, `${username}@test.local`, `Usuario ${role}`, await bcrypt.hash(password, 4), role, opts.allApps ?? true],
   );
   return { id: u.id as string, username, password };
 }

@@ -10,6 +10,8 @@ import { assertDeployPerm, can, requirePerm } from '../middleware/auth';
 import {
   analyzeDir, cloneApplication, createApplication, createVersion, proposeDockerfile, stageFromGit, stagingPath,
 } from '../services/apps';
+import { appAccessParam, grantApp, RESTRICTED_ROLES, visibleAppIds } from '../services/appAccess';
+import { closeUserSockets } from '../services/liveSockets';
 import { audit } from '../services/audit';
 import { appUrl, getApp, getEnv, getVersion } from '../services/core';
 import { detect, TECHNOLOGIES } from '../services/detector';
@@ -20,6 +22,8 @@ import { generateDockerfile } from '../services/templates';
 import { boolish, cleanupFiles, upload } from './_helpers';
 
 const r = Router();
+// Toda ruta /applications/:id exige que el usuario tenga acceso a esa app (si no, 404)
+r.param('id', appAccessParam);
 
 const ENV_NAME = z.enum(['development', 'test', 'staging', 'production']);
 const VOLUME = z.object({ source: z.string().min(1).max(200), target: z.string().min(1).max(255), type: z.enum(['volume', 'bind']), readOnly: z.boolean().optional() });
@@ -69,7 +73,8 @@ r.get('/applications', requirePerm('apps.view'), ah(async (req, res) => {
        LEFT JOIN application_versions v ON v.id=a.current_version_id
        LEFT JOIN repositories rp ON rp.application_id=a.id
       WHERE ($1::text IS NULL OR a.name ILIKE '%'||$1||'%' OR a.slug ILIKE '%'||$1||'%' OR a.technology ILIKE '%'||$1||'%')
-      ORDER BY a.name`, [search || null]);
+        AND ($2::uuid[] IS NULL OR a.id = ANY($2))
+      ORDER BY a.name`, [search || null, await visibleAppIds(req.user!)]);
   const envs = await envSummaries(apps.map((a) => a.id), boolish(req.query.stats));
   let out = apps.map((a) => {
     const list = envs.get(a.id) ?? [];
@@ -195,6 +200,7 @@ r.post('/applications', requirePerm('apps.create'), ah(async (req, res) => {
   if (body.deploy) assertDeployPerm(req.user, body.environment.name);
   if (body.createDatabase && !can(req.user, 'db.manage') && !can(req.user, 'apps.create')) throw badRequest('Sin permiso para crear bases');
   const result = await createApplication(body as any, req.user!);
+  await grantApp(req.user!.id, result.application.id, req.user!.id); // quien la crea queda asignado
   await audit(req, { action: 'app_create', entityType: 'application', entityId: result.application.id, app: result.application,
     details: { technology: body.technology, source: body.sourceType, environment: body.environment.name, database: !!body.createDatabase } });
   res.status(201).json(result);
@@ -354,8 +360,35 @@ r.post('/applications/:id/clone', requirePerm('apps.create'), ah(async (req, res
   }), req.body);
   if (b.deploy) assertDeployPerm(req.user, b.targetEnvironment ?? 'development');
   const result = await cloneApplication(app, b, req.user!);
+  await grantApp(req.user!.id, result.application.id, req.user!.id); // quien la clona queda asignado
   await audit(req, { action: 'app_clone', entityType: 'application', entityId: result.application.id, app: result.application, details: { from: app.name } });
   res.status(201).json(result);
+}));
+
+// ───────── accesos: qué Desarrolladores y Consultas trabajan en la app ─────────
+
+r.get('/applications/:id/access', requirePerm('apps.access'), ah(async (req, res) => {
+  const app = await getApp(req.params.id);
+  res.json(await q(
+    `SELECT u.id, u.username, u.full_name, u.all_apps, r.code AS role, r.name AS role_name,
+            EXISTS (SELECT 1 FROM user_applications ua WHERE ua.user_id=u.id AND ua.application_id=$1) AS assigned
+       FROM users u JOIN roles r ON r.id=u.role_id
+      WHERE u.active AND r.code = ANY($2) ORDER BY u.full_name`, [app.id, RESTRICTED_ROLES]));
+}));
+
+r.put('/applications/:id/access/:uid', requirePerm('apps.access'), ah(async (req, res) => {
+  const app = await getApp(req.params.id);
+  const { assigned } = parse(z.object({ assigned: z.boolean() }), req.body);
+  const u = await one(`SELECT u.id, u.username, r.code AS role FROM users u JOIN roles r ON r.id=u.role_id WHERE u.id::text=$1`, [req.params.uid]);
+  if (!u) throw notFound('Usuario no encontrado');
+  if (!RESTRICTED_ROLES.includes(u.role)) throw badRequest('Superadministradores y Administradores ya ven todas las aplicaciones');
+  if (assigned) await grantApp(u.id, app.id, req.user!.id);
+  else {
+    await q(`DELETE FROM user_applications WHERE user_id=$1 AND application_id=$2`, [u.id, app.id]);
+    closeUserSockets(u.id, 'Ya no tiene acceso a esta aplicación', app.id);
+  }
+  await audit(req, { action: assigned ? 'app_access_grant' : 'app_access_revoke', entityType: 'user', entityId: u.id, app, details: { username: u.username } });
+  res.json({ ok: true });
 }));
 
 export default r;

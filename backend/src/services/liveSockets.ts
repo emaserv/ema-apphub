@@ -1,6 +1,7 @@
 /**
  * Registro de WebSockets abiertos (logs y terminal) por usuario, para poder cortarlos
- * cuando se cierran sus sesiones: logout, cambio/reseteo de contraseña o desactivación.
+ * cuando se cierran sus sesiones (logout, cambio/reseteo de contraseña, desactivación)
+ * o cuando le quitan el acceso a una aplicación.
  * El token sólo se valida al abrir el WebSocket; sin esto seguirían vivos hasta que se cierren solos.
  */
 
@@ -14,6 +15,8 @@ export interface ClosableSocket {
 export const SESSION_CLOSED_CODE = 4001;
 
 const open = new Map<string, Set<ClosableSocket>>();
+/** Aplicación a la que está conectado cada socket (se conoce después de abrirlo). */
+const appOf = new WeakMap<ClosableSocket, string>();
 
 export function trackSocket(userId: string, ws: ClosableSocket) {
   let set = open.get(userId);
@@ -25,12 +28,20 @@ export function trackSocket(userId: string, ws: ClosableSocket) {
   });
 }
 
-/** Cierra todos los WebSockets abiertos del usuario y devuelve cuántos eran. */
-export function closeUserSockets(userId: string, reason = 'Sesión cerrada'): number {
+/** Anota a qué aplicación está conectado el socket, para poder cortarlo si le quitan esa app. */
+export function setSocketApp(ws: ClosableSocket, appId: string) {
+  appOf.set(ws, appId);
+}
+
+/**
+ * Cierra los WebSockets abiertos del usuario y devuelve cuántos eran.
+ * Con `appId`, sólo los conectados a esa aplicación.
+ */
+export function closeUserSockets(userId: string, reason = 'Sesión cerrada', appId?: string): number {
   const set = open.get(userId);
   if (!set) return 0;
-  open.delete(userId);
-  const sockets = [...set]; // al cerrarse, cada socket se quita solo del conjunto
+  // al cerrarse, cada socket se quita solo del conjunto
+  const sockets = [...set].filter((ws) => !appId || appOf.get(ws) === appId);
   for (const ws of sockets) ws.close(SESSION_CLOSED_CODE, reason);
   return sockets.length;
 }

@@ -40,6 +40,9 @@ app.listen(process.env.PORT || 3000, '0.0.0.0');
 | Bases de datos y backups | ✔ | ✔ | (ver) | — |
 | Terminal web | ✔ | — | — | — |
 | Usuarios y roles | ✔ | — | — | — |
+| Asignar quién trabaja en cada aplicación (pestaña **Accesos**) | ✔ | ✔ | — | — |
+
+**¿Qué aplicaciones ve cada uno?** Super Admin y Administrador ven todas. Desarrollador y Consulta ven **sólo las aplicaciones que tienen asignadas** (las demás no les aparecen en ningún lado), salvo que en *Usuarios* tengan marcado **"Todas las aplicaciones"**. Quien crea una aplicación queda asignado automáticamente. Las asignaciones se hacen desde *Usuarios* (Super Admin) o desde la pestaña *Accesos* de cada aplicación (Super Admin y Administrador). El rol sigue diciendo qué puede hacer en esas aplicaciones.
 
 ---
 
