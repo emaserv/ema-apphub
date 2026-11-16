@@ -35,7 +35,9 @@ const routes: Route[] = [
   ['post', '/auth/change-password', 'Auth', 'Cambiar contraseña'],
   ['get', '/users', 'Usuarios', 'Listar usuarios', 'users.manage'],
   ['post', '/users', 'Usuarios', 'Crear usuario', 'users.manage'],
-  ['put', '/users/:uid', 'Usuarios', 'Modificar usuario / rol / reset de contraseña', 'users.manage'],
+  ['put', '/users/:uid', 'Usuarios', 'Modificar usuario / rol / reset de contraseña / aplicaciones (allApps, applicationIds)', 'users.manage'],
+  ['get', '/applications/:id/access', 'Usuarios', 'Desarrolladores y Consultas con acceso a la app', 'apps.access'],
+  ['put', '/applications/:id/access/:uid', 'Usuarios', 'Dar o quitar acceso a la app ({ assigned: boolean })', 'apps.access'],
   ['delete', '/users/:uid', 'Usuarios', 'Desactivar usuario', 'users.manage'],
   ['get', '/roles', 'Usuarios', 'Roles y permisos (RBAC)'],
 

@@ -11,6 +11,7 @@ INSERT INTO permissions (code, description) VALUES
  ('apps.create',        'Crear e importar aplicaciones'),
  ('apps.edit',          'Modificar configuración de aplicaciones, ambientes y variables'),
  ('apps.delete',        'Eliminar aplicaciones'),
+ ('apps.access',        'Asignar qué Desarrolladores y Consultas trabajan en cada aplicación'),
  ('apps.operate',       'Iniciar, detener y reiniciar ambientes'),
  ('apps.deploy.nonprod','Desplegar en development / test / staging'),
  ('apps.deploy.prod',   'Desplegar y hacer rollback en production'),

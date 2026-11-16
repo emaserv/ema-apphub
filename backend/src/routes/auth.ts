@@ -6,6 +6,7 @@ import { one, q } from '../db/pool';
 import { ah, badRequest, conflict, HttpError, notFound, parse } from '../lib/http';
 import { AUTH_COOKIE, authenticate, clearSession, issueSession, requirePerm, revokeSessions, userFromToken } from '../middleware/auth';
 import { audit } from '../services/audit';
+import { closeUserSockets } from '../services/liveSockets';
 
 export const publicAuth = Router();
 export const privateAuth = Router();
@@ -69,26 +70,39 @@ privateAuth.get('/permissions', requirePerm('users.manage'), ah(async (_req, res
 }));
 
 privateAuth.get('/users', requirePerm('users.manage'), ah(async (_req, res) => {
-  res.json(await q(`SELECT u.id, u.username, u.email, u.full_name, u.active, u.last_login_at, u.created_at, r.code AS role, r.name AS role_name
+  res.json(await q(`SELECT u.id, u.username, u.email, u.full_name, u.active, u.last_login_at, u.created_at, r.code AS role, r.name AS role_name,
+                           u.all_apps, COALESCE((SELECT array_agg(ua.application_id) FROM user_applications ua WHERE ua.user_id=u.id), '{}') AS application_ids
                       FROM users u JOIN roles r ON r.id=u.role_id ORDER BY u.full_name`));
 }));
 
 const ROLE = z.enum(['superadmin', 'admin', 'developer', 'viewer']);
+/** Aplicaciones asignadas (sólo cuentan para Desarrollador y Consulta). */
+const APP_IDS = z.array(z.string().uuid()).max(1000);
+
+/** Deja asignadas exactamente estas aplicaciones al usuario (ignora ids de apps que no existen). */
+async function setUserApps(userId: string, appIds: string[], byUserId: string) {
+  await q(`WITH del AS (DELETE FROM user_applications WHERE user_id=$1 AND NOT (application_id = ANY($2::uuid[])))
+           INSERT INTO user_applications (user_id, application_id, created_by)
+           SELECT $1, a.id, $3 FROM applications a WHERE a.id = ANY($2::uuid[]) ON CONFLICT DO NOTHING`, [userId, appIds, byUserId]);
+}
 
 privateAuth.post('/users', requirePerm('users.manage'), ah(async (req, res) => {
   const b = parse(z.object({ username: z.string().regex(/^[a-zA-Z0-9._-]{3,60}$/), email: z.string().email(), fullName: z.string().min(2).max(160),
-    role: ROLE, password: PASSWORD }), req.body);
+    role: ROLE, password: PASSWORD, allApps: z.boolean().optional(), applicationIds: APP_IDS.optional() }), req.body);
   if (await one(`SELECT 1 FROM users WHERE lower(username)=lower($1) OR lower(email)=lower($2)`, [b.username, b.email])) throw conflict('Usuario o email existente');
-  const u = await one(`INSERT INTO users (username, email, full_name, password_hash, role_id, must_change_password)
-                       VALUES ($1,$2,$3,$4,(SELECT id FROM roles WHERE code=$5), true) RETURNING id, username, email, full_name`,
-    [b.username, b.email, b.fullName, await bcrypt.hash(b.password, 12), b.role]);
-  await audit(req, { action: 'user_create', entityType: 'user', entityId: u.id, details: { username: b.username, role: b.role } });
+  // Los usuarios nuevos arrancan sin aplicaciones, salvo que se marque "Todas" o se elijan algunas
+  const u = await one(`INSERT INTO users (username, email, full_name, password_hash, role_id, must_change_password, all_apps)
+                       VALUES ($1,$2,$3,$4,(SELECT id FROM roles WHERE code=$5), true, $6) RETURNING id, username, email, full_name`,
+    [b.username, b.email, b.fullName, await bcrypt.hash(b.password, 12), b.role, b.allApps ?? false]);
+  if (b.applicationIds?.length) await setUserApps(u.id, b.applicationIds, req.user!.id);
+  await audit(req, { action: 'user_create', entityType: 'user', entityId: u.id,
+    details: { username: b.username, role: b.role, allApps: b.allApps ?? false, applications: b.applicationIds?.length ?? 0 } });
   res.status(201).json(u);
 }));
 
 privateAuth.put('/users/:uid', requirePerm('users.manage'), ah(async (req, res) => {
   const b = parse(z.object({ email: z.string().email().optional(), fullName: z.string().min(2).max(160).optional(), role: ROLE.optional(),
-    active: z.boolean().optional(), password: PASSWORD.optional() }), req.body);
+    active: z.boolean().optional(), password: PASSWORD.optional(), allApps: z.boolean().optional(), applicationIds: APP_IDS.optional() }), req.body);
   const u = await one(`SELECT u.*, r.code AS role FROM users u JOIN roles r ON r.id=u.role_id WHERE u.id=$1`, [req.params.uid]);
   if (!u) throw notFound('Usuario no encontrado');
   if (u.id === req.user!.id && (b.active === false || (b.role && b.role !== u.role))) throw badRequest('No puede desactivarse ni cambiarse el rol a sí mismo');
@@ -97,14 +111,27 @@ privateAuth.put('/users/:uid', requirePerm('users.manage'), ah(async (req, res) 
     if (n.n <= 1) throw badRequest('Debe existir al menos un Super Administrador activo');
   }
   await q(`UPDATE users SET email=COALESCE($2,email), full_name=COALESCE($3,full_name), role_id=COALESCE((SELECT id FROM roles WHERE code=$4), role_id),
-             active=COALESCE($5,active), password_hash=COALESCE($6,password_hash), must_change_password = must_change_password OR $7, updated_at=now() WHERE id=$1`,
-    [u.id, b.email ?? null, b.fullName ?? null, b.role ?? null, b.active ?? null, b.password ? await bcrypt.hash(b.password, 12) : null, !!b.password]);
+             active=COALESCE($5,active), password_hash=COALESCE($6,password_hash), must_change_password = must_change_password OR $7,
+             all_apps=COALESCE($8,all_apps), updated_at=now() WHERE id=$1`,
+    [u.id, b.email ?? null, b.fullName ?? null, b.role ?? null, b.active ?? null, b.password ? await bcrypt.hash(b.password, 12) : null, !!b.password,
+     b.allApps ?? null]);
+  let appsChanged = false;
+  if (b.applicationIds) {
+    const before = (await q(`SELECT application_id FROM user_applications WHERE user_id=$1`, [u.id])).map((x) => x.application_id).sort().join();
+    await setUserApps(u.id, b.applicationIds, req.user!.id);
+    const after = (await q(`SELECT application_id FROM user_applications WHERE user_id=$1`, [u.id])).map((x) => x.application_id).sort().join();
+    appsChanged = before !== after;
+  }
+  // Si cambiaron sus accesos, se cortan su terminal y logs abiertos (al reconectar se revisa el acceso nuevo)
+  const accessChanged = (b.role && b.role !== u.role) || (b.allApps !== undefined && b.allApps !== u.all_apps) || appsChanged;
+  if (accessChanged && u.id !== req.user!.id) closeUserSockets(u.id, 'Cambiaron sus accesos');
   // Contraseña reseteada o usuario desactivado: se cierran sus sesiones abiertas
   if (b.password || b.active === false) {
     const sv = await revokeSessions(u.id);
     if (u.id === req.user!.id) issueSession(res, u.id, sv); // un admin que resetea su propia contraseña sigue conectado
   }
-  await audit(req, { action: 'user_update', entityType: 'user', entityId: u.id, details: { ...b, password: b.password ? '(reset)' : undefined } });
+  await audit(req, { action: 'user_update', entityType: 'user', entityId: u.id, details: { ...b, password: b.password ? '(reset)' : undefined, applicationIds: undefined,
+    applications: b.applicationIds?.length } });
   res.json({ ok: true });
 }));
 

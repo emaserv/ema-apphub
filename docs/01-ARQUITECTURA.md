@@ -70,6 +70,7 @@ lib/ → cifrado AES-256-GCM, ejecución segura de procesos (sin shell), errores
 ```
 roles 1─* role_permissions *─1 permissions
 roles 1─* users
+users *─* applications (user_applications: apps asignadas a Desarrollador/Consulta)
 users 1─* audit_logs
 
 applications 1─1 repositories
@@ -89,6 +90,7 @@ settings (clave/valor)
 | Tabla | Propósito |
 |---|---|
 | `users`, `roles`, `permissions`, `role_permissions` | Autenticación y RBAC |
+| `user_applications` | Permisos por aplicación: qué apps ve cada Desarrollador/Consulta (`users.all_apps` = todas). Superadmin y Admin ven todas |
 | `applications` | Ficha de la aplicación (nombre, slug, tecnología, autor, puerto interno, health path, registry) |
 | `repositories` | Origen Git (URL, proveedor, auth cifrada, branch/tag/commit, secreto de webhook) |
 | `application_versions` | Snapshot de código + Dockerfile + compose + variables (cifradas) + commit + comentario |

@@ -3,11 +3,13 @@ import { IncomingMessage, Server } from 'http';
 import { PassThrough } from 'stream';
 import { WebSocket, WebSocketServer } from 'ws';
 import { config } from '../config';
-import { AUTH_COOKIE, can, userFromToken } from '../middleware/auth';
+import { notFound } from '../lib/http';
+import { AUTH_COOKIE, AuthUser, can, userFromToken } from '../middleware/auth';
+import { canSeeApp } from '../services/appAccess';
 import { audit } from '../services/audit';
 import { envProject, getApp, getEnv } from '../services/core';
 import * as dk from '../services/docker';
-import { trackSocket } from '../services/liveSockets';
+import { setSocketApp, trackSocket } from '../services/liveSockets';
 
 const send = (ws: WebSocket, msg: unknown) => ws.readyState === WebSocket.OPEN && ws.send(JSON.stringify(msg));
 
@@ -44,17 +46,21 @@ export function attachWebSockets(server: Server) {
   });
 }
 
-async function resolveTarget(url: URL) {
-  const app = await getApp(url.searchParams.get('app') || '');
+/** Resuelve la app y el ambiente pedidos; una app no asignada al usuario se trata como inexistente. */
+async function resolveTarget(url: URL, user: AuthUser, ws: WebSocket) {
+  const ref = url.searchParams.get('app') || '';
+  if (!(await canSeeApp(user, ref))) throw notFound('Aplicación no encontrada');
+  const app = await getApp(ref);
+  setSocketApp(ws, app.id); // para cortarlo si le quitan el acceso a esta app
   const env = await getEnv(app.id, url.searchParams.get('environment'));
   const service = url.searchParams.get('service') === 'db' ? 'db' : 'app';
   return { app, env, service, container: envProject(app, env) + (service === 'db' ? '-db' : '') };
 }
 
-async function handleLogs(ws: WebSocket, url: URL, user: any, _req: any) {
+async function handleLogs(ws: WebSocket, url: URL, user: AuthUser, _req: any) {
   if (!can(user, 'apps.logs')) { send(ws, { type: 'error', message: 'Sin permiso para ver logs' }); return ws.close(); }
   try {
-    const { container } = await resolveTarget(url);
+    const { container } = await resolveTarget(url, user, ws);
     const m = await dk.getManagedContainer(container);
     if (!m) { send(ws, { type: 'error', message: `El contenedor ${container} no existe (¿ya se desplegó?)` }); return ws.close(); }
     const tail = Math.min(Number(url.searchParams.get('tail')) || 300, 5000);
@@ -77,13 +83,13 @@ async function handleLogs(ws: WebSocket, url: URL, user: any, _req: any) {
   }
 }
 
-async function handleTerminal(ws: WebSocket, url: URL, user: any, req: any) {
+async function handleTerminal(ws: WebSocket, url: URL, user: AuthUser, req: any) {
   if (!config.terminalEnabled || !can(user, 'terminal.access')) {
     send(ws, { type: 'error', message: 'Terminal deshabilitada o sin permiso (terminal.access)' });
     return ws.close();
   }
   let target: Awaited<ReturnType<typeof resolveTarget>>;
-  try { target = await resolveTarget(url); } catch (e: any) { send(ws, { type: 'error', message: e.message }); return ws.close(); }
+  try { target = await resolveTarget(url, user, ws); } catch (e: any) { send(ws, { type: 'error', message: e.message }); return ws.close(); }
   const m = await dk.getManagedContainer(target.container).catch(() => null);
   if (!m || !m.info.State.Running) { send(ws, { type: 'error', message: 'El contenedor no está en ejecución' }); return ws.close(); }
 

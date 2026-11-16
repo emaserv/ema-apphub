@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import { Request, Router } from 'express';
 import fs from 'fs';
 import path from 'path';
 import cron from 'node-cron';
@@ -6,6 +6,7 @@ import { z } from 'zod';
 import { one, q } from '../db/pool';
 import { ah, badRequest, notFound, parse } from '../lib/http';
 import { requirePerm } from '../middleware/auth';
+import { appAccessParam, visibleAppIds } from '../services/appAccess';
 import { audit } from '../services/audit';
 import { backupApp, backupDatabase, deleteBackup, restoreBackup } from '../services/backup';
 import { getApp } from '../services/core';
@@ -16,6 +17,8 @@ import { reloadBackupSchedules } from '../services/monitor';
 import { ctx } from './_helpers';
 
 const r = Router();
+// Toda ruta /applications/:id exige que el usuario tenga acceso a esa app (si no, 404)
+r.param('id', appAccessParam);
 
 // ───────── base de datos por ambiente ─────────
 
@@ -76,7 +79,7 @@ r.post('/applications/:id/database/users/:uid/password', requirePerm('db.manage'
   res.json({ ok: true, message: 'Contraseña actualizada. Por seguridad no se muestra; se inyectó en las variables del ambiente si corresponde.' });
 }));
 
-r.get('/databases', requirePerm('db.view'), ah(async (_req, res) => {
+r.get('/databases', requirePerm('db.view'), ah(async (req, res) => {
   res.json(await q(
     `SELECT d.id, d.engine, d.engine_version, d.container_name, d.host, d.port, d.database_name, d.status, d.created_at,
             a.id AS application_id, a.name AS application_name, a.slug, e.name AS environment,
@@ -84,7 +87,8 @@ r.get('/databases', requirePerm('db.view'), ah(async (_req, res) => {
             (SELECT count(*)::int FROM database_credentials c WHERE c.database_id=d.id) AS users_count,
             (SELECT max(created_at) FROM backups b WHERE b.database_id=d.id AND b.status='success') AS last_backup
        FROM databases d JOIN applications a ON a.id=d.application_id JOIN application_environments e ON e.id=d.environment_id
-      ORDER BY a.name, e.name`));
+      WHERE ($1::uuid[] IS NULL OR a.id = ANY($1))
+      ORDER BY a.name, e.name`, [await visibleAppIds(req.user!)]));
 }));
 
 // ───────── backups ─────────
@@ -97,7 +101,8 @@ r.get('/backups', requirePerm('backups.view'), ah(async (req, res) => {
             regexp_replace(b.file_path, '^.*/', '') AS file_name
        FROM backups b LEFT JOIN applications a ON a.id=b.application_id LEFT JOIN application_environments e ON e.id=b.environment_id
        LEFT JOIN users u ON u.id=b.created_by
-      WHERE ($1::uuid IS NULL OR b.application_id=$1) ORDER BY b.created_at DESC LIMIT 500`, [appId ?? null]));
+      WHERE ($1::uuid IS NULL OR b.application_id=$1) AND ($2::uuid[] IS NULL OR b.application_id = ANY($2))
+      ORDER BY b.created_at DESC LIMIT 500`, [appId ?? null, await visibleAppIds(req.user!)]));
 }));
 
 r.post('/applications/:id/backup', requirePerm('backups.manage'), ah(async (req, res) => {
@@ -129,14 +134,23 @@ r.post('/applications/:id/restore', requirePerm('backups.manage'), ah(async (req
   }
 }));
 
+/** Backup por id, sólo si es de una app que el usuario puede ver. */
+async function visibleBackup(req: Request, bid: string) {
+  const b = await one(`SELECT * FROM backups WHERE id::text=$1`, [bid]);
+  const ids = await visibleAppIds(req.user!);
+  if (!b || (ids && !ids.includes(b.application_id))) throw notFound('Backup no encontrado');
+  return b;
+}
+
 r.get('/backups/:bid/download', requirePerm('backups.manage'), ah(async (req, res) => {
-  const b = await one(`SELECT * FROM backups WHERE id=$1`, [req.params.bid]);
-  if (!b?.file_path || !fs.existsSync(b.file_path)) throw notFound('Archivo de backup no disponible');
+  const b = await visibleBackup(req, req.params.bid);
+  if (!b.file_path || !fs.existsSync(b.file_path)) throw notFound('Archivo de backup no disponible');
   await audit(req, { action: 'backup_download', entityType: 'backup', entityId: b.id, details: { file: path.basename(b.file_path) } });
   res.download(b.file_path, path.basename(b.file_path));
 }));
 
 r.delete('/backups/:bid', requirePerm('backups.manage'), ah(async (req, res) => {
+  await visibleBackup(req, req.params.bid);
   await deleteBackup(req.params.bid);
   await audit(req, { action: 'backup_delete', entityType: 'backup', entityId: req.params.bid });
   res.json({ ok: true });
@@ -197,10 +211,11 @@ r.post('/git/refs', requirePerm('git.manage', 'apps.create'), ah(async (req, res
   res.json(await listRefs(b));
 }));
 
-r.get('/repositories', requirePerm('apps.view'), ah(async (_req, res) => {
+r.get('/repositories', requirePerm('apps.view'), ah(async (req, res) => {
   res.json(await q(`SELECT r.id, r.provider, r.url, r.auth_type, r.branch, r.tag, r.commit_sha, r.last_commit, r.last_sync_at, r.auto_deploy_environment,
                            a.id AS application_id, a.name AS application_name, a.slug
-                      FROM repositories r JOIN applications a ON a.id=r.application_id ORDER BY a.name`));
+                      FROM repositories r JOIN applications a ON a.id=r.application_id
+                     WHERE ($1::uuid[] IS NULL OR a.id = ANY($1)) ORDER BY a.name`, [await visibleAppIds(req.user!)]));
 }));
 
 export default r;

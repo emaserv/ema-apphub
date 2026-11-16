@@ -9,6 +9,7 @@ import { ah, badRequest, conflict, notFound, parse } from '../lib/http';
 import { parseDotenv, SECRET_KEY_RE, toDotenvLine } from '../lib/util';
 import { assertDeployPerm, requirePerm } from '../middleware/auth';
 import { createEnvironment, updateFromGit, validateVolume } from '../services/apps';
+import { appAccessParam } from '../services/appAccess';
 import { audit } from '../services/audit';
 import {
   appUrl, assertPortFree, currentImageFor, envProject, getApp, getEnv, getVersion, imageTag, listVars, nextFreePort, upsertVar, writeEnvFiles,
@@ -21,6 +22,8 @@ import { generateCompose } from '../services/compose';
 import { ctx } from './_helpers';
 
 const r = Router();
+// Toda ruta /applications/:id exige que el usuario tenga acceso a esa app (si no, 404)
+r.param('id', appAccessParam);
 const PORT = z.coerce.number().int().min(1).max(65535);
 const ENV_NAME = z.enum(['development', 'test', 'staging', 'production']);
 
