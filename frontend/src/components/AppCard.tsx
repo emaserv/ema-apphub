@@ -1,4 +1,4 @@
-import { useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router';
 import { ExternalLink, Rocket, ScrollText } from 'lucide-react';
 import { api, ENV_LABEL, fmtBytes } from '../api/client';
 import { useAuth } from '../auth';

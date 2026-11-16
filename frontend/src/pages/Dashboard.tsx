@@ -1,4 +1,4 @@
-import { useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router';
 import { Activity, AlertTriangle, Boxes, CheckCircle2, Container, Database, HardDrive, PauseCircle, Rocket } from 'lucide-react';
 import { api, ENV_LABEL, fmtAgo, fmtBytes } from '../api/client';
 import AppCard from '../components/AppCard';

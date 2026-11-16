@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router';
 import {
   Archive, Boxes, ClipboardList, Container, Database, GitBranch, LayoutDashboard, LogOut, Menu, Rocket, Settings, Users, Plus,
 } from 'lucide-react';
