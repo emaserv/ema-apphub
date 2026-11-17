@@ -13,6 +13,7 @@ import {
 import { appAccessParam, grantApp, RESTRICTED_ROLES, visibleAppIds } from '../services/appAccess';
 import { closeUserSockets } from '../services/liveSockets';
 import { audit } from '../services/audit';
+import { removeVersionImages } from '../services/cleanup';
 import { appUrl, getApp, getEnv, getVersion } from '../services/core';
 import { detect, TECHNOLOGIES } from '../services/detector';
 import { enqueueDeploy, teardown } from '../services/deploy';
@@ -344,10 +345,17 @@ r.delete('/applications/:id/versions/:vid', requirePerm('apps.edit'), ah(async (
   const app = await getApp(req.params.id);
   const v = await getVersion(app.id, req.params.vid);
   if (await one(`SELECT 1 FROM application_environments WHERE deployed_version_id=$1`, [v.id])) throw conflict('La versión está desplegada en un ambiente');
+  if (await one(`SELECT 1 FROM deployments WHERE version_id=$1 AND status IN ('queued','running')`, [v.id])) throw conflict('La versión tiene un deploy en curso');
+  // Las imágenes se borran antes que las filas: los tags del registry están en docker_images (se borra en cascada)
+  const images = await removeVersionImages(app.slug, v).catch(() => ({ images: [], freedBytes: 0, skipped: [] as string[] }));
   await q(`DELETE FROM application_versions WHERE id=$1`, [v.id]);
-  rmrf(path.dirname(v.source_path));
-  await audit(req, { action: 'version_delete', entityType: 'version', entityId: v.id, app, details: { version: v.version } });
-  res.json({ ok: true });
+  // Sólo se borra la carpeta si es exactamente la de esta versión dentro de DATA_DIR (nunca una ruta tomada a ciegas de la base)
+  const versionDir = path.dirname(paths.versionSource(app.slug, v.version));
+  if (path.resolve(path.dirname(v.source_path)) === path.resolve(versionDir)) rmrf(versionDir);
+  else console.warn(`[versiones] no se borró ${v.source_path}: está fuera de la carpeta esperada ${versionDir}`);
+  await audit(req, { action: 'version_delete', entityType: 'version', entityId: v.id, app,
+    details: { version: v.version, images: images.images, freedBytes: images.freedBytes, ...(images.skipped.length ? { skipped: images.skipped } : {}) } });
+  res.json({ ok: true, images: images.images, freedBytes: images.freedBytes });
 }));
 
 // ───────── clonación ─────────

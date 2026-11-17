@@ -2,12 +2,13 @@ import cron, { type ScheduledTask } from 'node-cron';
 import fs from 'fs';
 import os from 'os';
 import { config } from '../config';
-import { q } from '../db/pool';
+import { one, q } from '../db/pool';
 import { AppRow, EnvRow, envProject } from './core';
 import { runScheduled } from './backup';
+import { cleanupAllImages } from './cleanup';
 import { probe } from './deploy';
 import * as dk from './docker';
-import { healthNotice, healthTransition, notify } from './notify';
+import { diskNotice, diskTransition, healthNotice, healthTransition, notify, notifySuperadmins } from './notify';
 import { cleanupTmp } from './storage';
 
 // ───────── health checks periódicos ─────────
@@ -125,11 +126,38 @@ export async function reloadBackupSchedules() {
   }
 }
 
+// ───────── espacio en disco ─────────
+
+/**
+ * Avisa en la campanita cuando el disco de DATA_DIR pasa DISK_ALERT_PERCENT (y lanza la limpieza de imágenes),
+ * y vuelve a avisar cuando baja. El estado sale del último aviso guardado, así un reinicio no repite el aviso.
+ */
+export async function diskRound() {
+  const { disk } = hostMetrics();
+  if (!disk.total) return;
+  const last = await one<{ kind: string }>(`SELECT kind FROM notifications WHERE kind IN ('disk_full','disk_ok') ORDER BY created_at DESC LIMIT 1`);
+  const kind = diskTransition(disk.percent, last?.kind === 'disk_full', config.diskAlertPercent);
+  if (!kind) return;
+  let freedBytes = 0;
+  if (kind === 'full') {
+    const r = await cleanupAllImages().catch(() => null);
+    freedBytes = (r?.freedBytes ?? 0) + (r?.danglingBytes ?? 0);
+  }
+  const after = freedBytes ? hostMetrics().disk : disk;
+  await notifySuperadmins(diskNotice({ kind, percent: after.percent, free: after.free, total: after.total, threshold: config.diskAlertPercent, freedBytes }));
+}
+
 export async function startMonitors() {
   setInterval(sampleCpu, 5000);
   setInterval(() => void syncStatus().catch((e) => console.error('[sync]', e.message)), 20_000);
   setInterval(() => void healthRound().catch((e) => console.error('[health]', e.message)), config.healthIntervalSec * 1000);
   setInterval(cleanupTmp, 3600_000);
+  setInterval(() => void diskRound().catch((e) => console.error('[disco]', e.message)), 10 * 60_000);
+  setTimeout(() => void diskRound().catch((e) => console.error('[disco]', e.message)), 60_000);
+  // Limpieza diaria de imágenes de versiones viejas (04:30, fuera del horario de trabajo)
+  cron.schedule('30 4 * * *', () => void cleanupAllImages()
+    .then((r) => { if (r.images.length) console.log(`[limpieza] ${r.images.length} imágenes borradas`); })
+    .catch((e) => console.error('[limpieza]', e.message)), { timezone: process.env.TZ || 'America/Argentina/Buenos_Aires' });
   // deploys que quedaron "colgados" por un reinicio del backend
   await q(`UPDATE deployments SET status='failed', error='Interrumpido por reinicio de la plataforma', finished_at=now() WHERE status IN ('queued','running')`);
   await q(`UPDATE application_environments SET status='error' WHERE status='deploying'`);

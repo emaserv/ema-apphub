@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Play, RotateCw, Square, Trash2, Eraser } from 'lucide-react';
 import { api, fmtBytes, fmtDate } from '../api/client';
 import { useAuth } from '../auth';
-import { Confirm, Spinner, StatusBadge, Tabs, useAction, useData } from '../components/ui';
+import { Confirm, Spinner, StatusBadge, Tabs, useAction, useData, useToast } from '../components/ui';
 
 export default function DockerPage() {
   const [tab, setTab] = useState<'containers' | 'images'>('containers');
@@ -11,8 +11,17 @@ export default function DockerPage() {
   const { data: images, reload: reloadImgs } = useData<any[]>(() => api('/docker/images'), [tab]);
   const { can } = useAuth();
   const { run, busy } = useAction();
+  const toast = useToast();
   const [rm, setRm] = useState<any>(null);
   const act = (c: any, a: string) => run(async () => { await api(`/docker/containers/${c.name}/${a}`, { body: {} }); reload(); }, `${a}: ${c.name}`);
+  const cleanup = () => run(async () => {
+    const r = await api('/docker/images/prune', { body: {} });
+    reloadImgs();
+    const freed = (r.freedBytes ?? 0) + (r.danglingBytes ?? 0);
+    toast(r.images?.length || freed
+      ? `Limpieza lista: ${r.images?.length ?? 0} imágenes de versiones viejas, ${fmtBytes(freed)} liberados${r.buildCache ? ` (+ ${r.buildCache} de caché de build)` : ''}`
+      : 'No había imágenes viejas para borrar');
+  });
 
   return (
     <>
@@ -48,7 +57,12 @@ export default function DockerPage() {
       ))}
       {tab === 'images' && (
         <div className="stack">
-          {can('docker.manage') && <div><button className="btn outline sm" onClick={() => run(async () => { const r = await api('/docker/images/prune', { body: {} }); reloadImgs(); return r; }, 'Imágenes huérfanas eliminadas')}><Eraser size={14} />Limpiar imágenes huérfanas</button></div>}
+          {can('docker.manage') && (
+            <div className="row">
+              <button className="btn outline sm" disabled={busy} onClick={cleanup}><Eraser size={14} />Limpiar imágenes viejas</button>
+              <span className="muted small">Se hace sola cada noche y después de cada deploy. Conserva las imágenes de las últimas versiones de cada app, las desplegadas y la del rollback.</span>
+            </div>
+          )}
           {!images ? <Spinner /> : (
             <div className="table-wrap"><table className="table">
               <thead><tr><th>Tag</th><th>ID</th><th>Aplicación</th><th>Versión</th><th>Tamaño</th><th>Creada</th></tr></thead>

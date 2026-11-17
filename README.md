@@ -132,6 +132,9 @@ El frontend usa `frontend/public/logo-ema.png` (logo principal de www.emaservici
 | `HEALTH_INTERVAL_SEC` | Frecuencia de health checks | `60` |
 | `TERMINAL_ENABLED` | Habilita la terminal web | `true` |
 | `SCAN_ENABLED` | Escaneo de vulnerabilidades con Trivy en cada deploy (`false` lo desactiva, por ejemplo para destrabar un deploy urgente) | `true` |
+| `IMAGE_KEEP_VERSIONS` | Imágenes Docker que se conservan por app: las de las últimas N versiones, más las desplegadas y la del rollback. Las demás se borran cada noche (04:30) y después de cada deploy; la versión queda y, si se vuelve a desplegar, se recompila | `5` |
+| `DISK_ALERT_PERCENT` | Aviso en la campanita cuando el disco de `DATA_DIR` supera este % (y se lanza la limpieza de imágenes) | `85` |
+| `DEFAULT_MEMORY_LIMIT_MB` | Límite de memoria con el que se crea cada ambiente nuevo (se cambia por ambiente en *Puertos y dominio*); `0` = sin límite | `512` |
 
 ## Puertos
 

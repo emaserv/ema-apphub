@@ -5,6 +5,7 @@ import { one, q } from '../db/pool';
 import { decrypt } from '../lib/crypto';
 import { sleep } from '../lib/util';
 import { audit } from './audit';
+import { cleanupAppImages } from './cleanup';
 import {
   AppRow, EnvRow, VersionRow, assertPortFree, envProject, getApp, getVersion, imageTag, registryTag, writeEnvFiles,
 } from './core';
@@ -251,6 +252,8 @@ async function runDeployment(depId: string, r: DeployRequest) {
     await log.close();
     await q(`UPDATE deployments SET status='success', current_step='done', finished_at=now() WHERE id=$1`, [depId]);
     await audit(null, { action: 'deploy', entityType: 'deployment', entityId: depId, app, details: { version: version.version, environment: env.name, trigger: r.trigger, from: r.promotedFrom } }, user);
+    // En segundo plano: borra imágenes de versiones viejas de esta app (no frena ni hace fallar el deploy)
+    void cleanupAppImages(app.id).catch((err) => console.error('[limpieza]', err.message));
   } catch (e: any) {
     const msg = String(e?.message || e);
     log.line(`✖ ERROR: ${msg}`);
