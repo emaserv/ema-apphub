@@ -211,6 +211,20 @@ cd backend && npm install && DATABASE_URL=postgres://apphub:apphub@localhost:543
 cd frontend && npm install && npm run dev      # http://localhost:5173 (proxy a :4000)
 ```
 
+### Tests
+
+```bash
+cd backend
+npx tsx --test --test-concurrency=2 test/*.test.ts     # unitarios (no necesitan base ni Docker)
+
+# tests de API: usan una base PostgreSQL propia que BORRAN en cada corrida (su nombre debe terminar en _test)
+docker run -d --name apphub-test-db -p 127.0.0.1:15432:5432 -e POSTGRES_PASSWORD=test -e POSTGRES_DB=apphub_test postgres:16-alpine
+TEST_DATABASE_URL=postgres://postgres:test@127.0.0.1:15432/apphub_test npm run test:api
+```
+
+La base de tests se crea una sola vez; después alcanza con `docker start apphub-test-db` y `docker stop apphub-test-db`.
+En Windows conviene un puerto menor a 49152 (como 15432): los puertos más altos los puede reservar Hyper-V/WSL al reiniciar y el contenedor no arranca.
+
 ## Escalabilidad futura
 
 El acceso al runtime está concentrado en `backend/src/services/docker.ts`, lo que permite agregar múltiples hosts Docker (`DOCKER_HOST` por servidor), un driver Kubernetes, réplicas balanceadas por Traefik, exportación de métricas a Prometheus/Grafana y alertas (email, Slack, Teams, webhooks) a partir de los eventos ya persistidos (deployments, health checks, auditoría).
