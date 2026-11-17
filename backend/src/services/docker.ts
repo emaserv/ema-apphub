@@ -183,6 +183,28 @@ export async function execIn(container: string, cmd: string[], input?: string) {
   return run('docker', args, { input, timeoutMs: 120_000 });
 }
 
+// ───────── terminal web ─────────
+
+/** Variable de entorno que marca los procesos de una sesión de terminal web (el shell y todo lo que se lance desde él). */
+export const TERMINAL_MARK = 'APPHUB_TERM';
+
+/**
+ * Script (sh/busybox) que termina los procesos de una sesión de terminal: busca en /proc los que tienen la marca
+ * APPHUB_TERM=<id> en su entorno, les manda HUP (como al cerrar una terminal) y, si a los 2 s siguen, KILL.
+ * Hace falta porque Docker no termina un exec con TTY cuando se corta la conexión.
+ */
+export function terminalCleanupScript(sessionId: string): string {
+  if (!/^[a-f0-9-]{8,64}$/.test(sessionId)) throw new Error('Id de sesión de terminal inválido');
+  const find = `for p in /proc/[0-9]*; do tr '\\0' '\\n' < "$p/environ" 2>/dev/null | grep -qx '${TERMINAL_MARK}=${sessionId}' && echo "\${p#/proc/}"; done`;
+  return `pids=$(${find}); [ -n "$pids" ] && kill -HUP $pids 2>/dev/null; sleep 2; pids=$(${find}); [ -n "$pids" ] && kill -KILL $pids 2>/dev/null; exit 0`;
+}
+
+/** Termina los procesos de una sesión de terminal web que haya quedado viva en el contenedor. */
+export async function endTerminalSession(container: string, sessionId: string) {
+  const exec = await docker.getContainer(container).exec({ Cmd: ['/bin/sh', '-c', terminalCleanupScript(sessionId)], AttachStdout: false, AttachStderr: false });
+  await exec.start({ Detach: true });
+}
+
 export async function removeVolume(name: string) {
   try { await docker.getVolume(name).remove({ force: true }); } catch (e: any) { if (e?.statusCode !== 404) throw e; }
 }
