@@ -37,7 +37,14 @@ export default function WebTerminal({ appId, environment, service }: { appId: st
     const d = term.onData((data) => ws.readyState === WebSocket.OPEN && ws.send(JSON.stringify({ type: 'input', data })));
     const onResize = () => { fit.fit(); ws.readyState === WebSocket.OPEN && ws.send(JSON.stringify({ type: 'resize', cols: term.cols, rows: term.rows })); };
     window.addEventListener('resize', onResize);
-    return () => { d.dispose(); window.removeEventListener('resize', onResize); ws.close(); term.dispose(); };
+    return () => {
+      // Primero se desconectan los avisos del socket: su cierre llega después y no debe escribir en una terminal ya destruida
+      ws.onopen = ws.onmessage = ws.onclose = null;
+      d.dispose();
+      window.removeEventListener('resize', onResize);
+      ws.close();
+      term.dispose();
+    };
   }, [appId, environment, service, session]);
 
   return (

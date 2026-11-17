@@ -1,4 +1,5 @@
 import { parse as parseCookie } from 'cookie';
+import { randomUUID } from 'crypto';
 import { IncomingMessage, Server } from 'http';
 import { PassThrough } from 'stream';
 import { WebSocket, WebSocketServer } from 'ws';
@@ -93,9 +94,11 @@ async function handleTerminal(ws: WebSocket, url: URL, user: AuthUser, req: any)
   const m = await dk.getManagedContainer(target.container).catch(() => null);
   if (!m || !m.info.State.Running) { send(ws, { type: 'error', message: 'El contenedor no está en ejecución' }); return ws.close(); }
 
+  // Marca propia de esta sesión: al cerrarse se terminan sus procesos (con TTY, Docker no lo hace solo)
+  const sessionId = randomUUID();
   const exec = await m.container.exec({
     Cmd: ['/bin/sh', '-c', 'if command -v bash >/dev/null 2>&1; then exec bash; else exec sh; fi'],
-    AttachStdin: true, AttachStdout: true, AttachStderr: true, Tty: true, Env: ['TERM=xterm-256color'],
+    AttachStdin: true, AttachStdout: true, AttachStderr: true, Tty: true, Env: ['TERM=xterm-256color', `${dk.TERMINAL_MARK}=${sessionId}`],
   });
   const stream = await exec.start({ hijack: true, stdin: true, Tty: true });
   await audit(req, { action: 'terminal_open', entityType: 'container', entityId: target.container, app: target.app, details: { environment: target.env.name, service: target.service } });
@@ -122,6 +125,7 @@ async function handleTerminal(ws: WebSocket, url: URL, user: AuthUser, req: any)
   ws.on('close', async () => {
     clearTimeout(idle);
     stream.end();
+    await dk.endTerminalSession(target.container, sessionId).catch((e) => console.warn('[terminal] no se pudo cerrar la sesión:', e.message));
     // registro de comandos de la sesión (texto tecleado, sin secuencias de control)
     const commands = typed.replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '').split(/\r|\n/).map((s) => s.trim()).filter(Boolean).slice(-200);
     await audit(req, { action: 'terminal_close', entityType: 'container', entityId: target.container, app: target.app, details: { commands } });
