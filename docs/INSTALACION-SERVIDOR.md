@@ -43,6 +43,14 @@ sudo nano /opt/ema-apphub/.env
 | `APPS_BASE_DOMAIN` | dominio base para las apps, ej. `emaservicios.com.ar` | dejar el valor |
 | `DATA_DIR` | `/opt/ema-apphub/data` (disco con espacio y persistente) | igual |
 | `TERMINAL_ENABLED` | `true` o `false` según se quiera permitir la terminal web | igual |
+| `DEFAULT_MEMORY_LIMIT_MB` | memoria máxima de cada ambiente nuevo (`512`); subirla si las apps suelen necesitar más | igual |
+| `DISK_ALERT_PERCENT` | % de uso del disco de `DATA_DIR` a partir del cual avisa (`85`) | igual |
+
+> **Disco:** las imágenes Docker se guardan en `/var/lib/docker` y los datos de AppHub en `DATA_DIR`. El aviso de disco mide el disco de
+> `DATA_DIR`; si `/var/lib/docker` está en otro disco, controlarlo por fuera. La limpieza automática de imágenes viejas funciona igual.
+>
+> **Memoria:** el límite por defecto se aplica sólo a los ambientes que se creen desde ahora. Los que ya existían quedan sin límite:
+> revisarlos en *Puertos y dominio* de cada app.
 
 > **Puertos:** si el servidor ya usa el 80, 443 u 8080, cambiarlos con `HTTP_PORT`, `HTTPS_PORT` y `PLATFORM_HTTP_PORT`. Ajustar también
 > `PORT_RANGE_START`/`PORT_RANGE_END` para que el rango de las apps no incluya puertos ya ocupados: AppHub sólo detecta los puertos usados

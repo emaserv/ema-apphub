@@ -115,7 +115,7 @@ const routes: Route[] = [
   ['get', '/docker/containers', 'Docker', 'Contenedores administrados (?stats=1)', 'docker.view'],
   ['post', '/docker/containers/:cid/:action', 'Docker', 'start | stop | restart | remove', 'docker.manage'],
   ['get', '/docker/images', 'Docker', 'Imágenes de la plataforma', 'docker.view'],
-  ['post', '/docker/images/prune', 'Docker', 'Eliminar imágenes huérfanas', 'docker.manage'],
+  ['post', '/docker/images/prune', 'Docker', 'Limpiar imágenes de versiones viejas, huérfanas y caché de build', 'docker.manage'],
 
   ['get', '/system/dashboard', 'Sistema', 'Resumen del dashboard', 'apps.view'],
   ['get', '/system/metrics', 'Sistema', 'CPU / RAM / disco / Docker', 'apps.view'],

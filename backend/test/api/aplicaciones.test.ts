@@ -23,6 +23,17 @@ describe('ciclo de vida de una aplicación (sin deploy)', () => {
     assert.ok(await one(`SELECT 1 FROM audit_logs WHERE action = 'app_create' AND entity_id = $1`, [id]));
   });
 
+  test('los ambientes nuevos tienen 512 MB de memoria por defecto; se puede pedir otro valor o ninguno', async () => {
+    const app = (await api('POST', '/applications', { session: s, body: newApp('Memoria Por Defecto') })).body.application;
+    assert.equal((await one(`SELECT memory_limit_mb FROM application_environments WHERE application_id=$1`, [app.id])).memory_limit_mb, 512);
+    const sinLimite = await api('POST', `/applications/${app.id}/environments`, { session: s, body: { name: 'test', memoryLimitMb: null, externalPort: null } });
+    assert.equal(sinLimite.status, 201, JSON.stringify(sinLimite.body));
+    assert.equal(sinLimite.body.memory_limit_mb, null);
+    const conValor = await api('POST', `/applications/${app.id}/environments`, { session: s, body: { name: 'staging', memoryLimitMb: 1024, externalPort: null } });
+    assert.equal(conValor.body.memory_limit_mb, 1024);
+    assert.equal((await api('DELETE', `/applications/${app.id}?purge=1`, { session: s })).status, 200);
+  });
+
   test('no permite dos apps con el mismo identificador ni datos inválidos', async () => {
     assert.equal((await api('POST', '/applications', { session: s, body: newApp('gestion de ordenes') })).status, 409);
     assert.equal((await api('POST', '/applications', { session: s, body: newApp('Puerto malo', { internalPort: 70000 }) })).status, 400);

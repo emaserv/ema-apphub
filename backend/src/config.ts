@@ -48,6 +48,13 @@ export const config = {
   terminalEnabled: bool(process.env.TERMINAL_ENABLED, true),
   /** Escaneo de vulnerabilidades de las imágenes con Trivy durante el deploy. */
   scanEnabled: bool(process.env.SCAN_ENABLED, true),
+
+  /** Limpieza de imágenes: se conservan las de las últimas N versiones de cada app (además de las desplegadas). */
+  imageKeepVersions: Math.max(1, int(process.env.IMAGE_KEEP_VERSIONS, 5)),
+  /** Aviso en la campanita cuando el disco de DATA_DIR supera este porcentaje de uso. */
+  diskAlertPercent: Math.min(99, Math.max(50, int(process.env.DISK_ALERT_PERCENT, 85))),
+  /** Límite de memoria con el que se crea cada ambiente nuevo (MB). 0 = sin límite. */
+  defaultMemoryLimitMb: Math.max(0, int(process.env.DEFAULT_MEMORY_LIMIT_MB, 512)),
 };
 
 export const paths = {

@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import { paths } from '../config';
+import { config, paths } from '../config';
 import { one, q } from '../db/pool';
 import { decrypt, encrypt } from '../lib/crypto';
 import { badRequest, conflict, notFound } from '../lib/http';
@@ -118,8 +118,15 @@ export interface EnvInput {
   httpsEnabled?: boolean;
   volumes?: { source: string; target: string; type: 'volume' | 'bind'; readOnly?: boolean }[];
   variables?: { key: string; value: string; isSecret?: boolean }[];
+  /** Sin indicar → DEFAULT_MEMORY_LIMIT_MB; null → sin límite. */
   memoryLimitMb?: number | null;
   cpuLimit?: number | null;
+}
+
+/** Límite de memoria de un ambiente nuevo: el indicado, o el de DEFAULT_MEMORY_LIMIT_MB (0 = sin límite). */
+export function initialMemoryLimit(requested: number | null | undefined, defaultMb = config.defaultMemoryLimitMb): number | null {
+  if (requested !== undefined) return requested;
+  return defaultMb > 0 ? defaultMb : null;
 }
 
 /** `revealOwner`: si el error de puerto ocupado puede nombrar la app que lo usa (ver assertPortFree). */
@@ -131,7 +138,7 @@ export async function createEnvironment(app: AppRow, e: EnvInput, isDefault: boo
     `INSERT INTO application_environments (application_id, name, is_default, internal_port, external_port, domain, https_enabled, volumes, memory_limit_mb, cpu_limit)
      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
     [app.id, e.name, isDefault, e.internalPort ?? null, port ?? null, e.domain?.trim().toLowerCase() || null, e.httpsEnabled ?? true,
-     JSON.stringify(e.volumes ?? []), e.memoryLimitMb ?? null, e.cpuLimit ?? null],
+     JSON.stringify(e.volumes ?? []), initialMemoryLimit(e.memoryLimitMb), e.cpuLimit ?? null],
   );
   for (const v of e.variables ?? []) await upsertVar(env!.id, v.key, v.value, !!v.isSecret);
   return env!;

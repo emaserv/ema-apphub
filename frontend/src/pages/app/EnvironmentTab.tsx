@@ -50,7 +50,9 @@ export default function EnvironmentTab({ app, env, reload }: TabProps) {
           <Field label="Puerto externo" hint={portMsg ? <span style={{ color: 'var(--err)' }}>{portMsg}</span> : 'Se detectan conflictos antes de guardar y de cada deploy'}>
             <input className="input" type="number" disabled={ro} value={f.externalPort} onChange={(e) => setF({ ...f, externalPort: e.target.value })} onBlur={check} />
           </Field>
-          <Field label="Límite de memoria (MB)"><input className="input" type="number" disabled={ro} value={f.memoryLimitMb} onChange={(e) => setF({ ...f, memoryLimitMb: e.target.value })} placeholder="sin límite" /></Field>
+          <Field label="Límite de memoria (MB)" hint="Si la app lo supera, Docker la reinicia. Vacío = sin límite (puede afectar a las demás apps del servidor).">
+            <input className="input" type="number" disabled={ro} value={f.memoryLimitMb} onChange={(e) => setF({ ...f, memoryLimitMb: e.target.value })} placeholder="sin límite" />
+          </Field>
           <Field label="Límite de CPU (núcleos)"><input className="input" type="number" step="0.25" disabled={ro} value={f.cpuLimit} onChange={(e) => setF({ ...f, cpuLimit: e.target.value })} placeholder="sin límite" /></Field>
         </div>
         <div className="field">Puertos adicionales</div>

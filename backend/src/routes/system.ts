@@ -9,6 +9,7 @@ import { requirePerm } from '../middleware/auth';
 import { updateFromGit } from '../services/apps';
 import { visibleAppIds, visibleAppSlugs } from '../services/appAccess';
 import { audit } from '../services/audit';
+import { cleanupAllImages } from '../services/cleanup';
 import { assertPortFree, getApp, getEnv, nextFreePort } from '../services/core';
 import * as dk from '../services/docker';
 import { hostMetrics } from '../services/monitor';
@@ -162,10 +163,12 @@ system.get('/docker/images', requirePerm('docker.view'), ah(async (req, res) => 
   res.json(imgs.map((i) => ({ id: i.Id.replace('sha256:', '').slice(0, 12), tags: i.RepoTags, size: i.Size, created: i.Created, app: i.Labels?.['ema.app'], version: i.Labels?.['ema.version'] })));
 }));
 
+/** Limpieza manual: imágenes de versiones viejas (mismas reglas que la automática), huérfanas y caché de build vieja. */
 system.post('/docker/images/prune', requirePerm('docker.manage'), ah(async (req, res) => {
-  const r = await dk.docker.pruneImages({ filters: { dangling: { true: true } } });
-  await audit(req, { action: 'images_prune', entityType: 'docker', details: { reclaimed: r.SpaceReclaimed } });
-  res.json(r);
+  const r = await cleanupAllImages();
+  await audit(req, { action: 'images_prune', entityType: 'docker',
+    details: { images: r.images.length, freedBytes: r.freedBytes, danglingBytes: r.danglingBytes, buildCache: r.buildCache || undefined } });
+  res.json({ ...r, SpaceReclaimed: r.freedBytes + r.danglingBytes });
 }));
 
 // ───────── webhooks Git (GitHub / GitLab / Bitbucket / genérico) ─────────

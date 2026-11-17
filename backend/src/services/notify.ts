@@ -2,10 +2,12 @@ import { q } from '../db/pool';
 
 /**
  * Avisos dentro de AppHub (campanita) para los superadministradores activos:
- * deploy fallido, app caída / recuperada, backup programado fallido y vulnerabilidades críticas en una imagen.
+ * deploy fallido, app caída / recuperada, backup programado fallido, vulnerabilidades críticas en una imagen
+ * y disco casi lleno / recuperado.
  */
 
-export type NoticeKind = 'deploy_failed' | 'deploy_rolled_back' | 'app_down' | 'app_recovered' | 'backup_failed' | 'image_vulnerable';
+export type NoticeKind = 'deploy_failed' | 'deploy_rolled_back' | 'app_down' | 'app_recovered' | 'backup_failed' | 'image_vulnerable'
+  | 'disk_full' | 'disk_ok';
 export interface Notice { kind: NoticeKind; severity: 'error' | 'warn' | 'ok'; title: string; body: string; appId?: string }
 interface AppRef { id: string; name: string }
 
@@ -82,6 +84,39 @@ export function vulnerableImageNotice(p: { app: AppRef; env: string; version: st
       p.criticalFixable > 0 && 'Conviene actualizar esas dependencias antes de desplegar en production: ahí el deploy se bloquea.',
     ),
   };
+}
+
+// ───────── espacio en disco ─────────
+
+/** Margen para el aviso de "se recuperó": evita avisos repetidos si el uso oscila justo alrededor del límite. */
+export const DISK_RECOVER_MARGIN = 5;
+
+/**
+ * Dice si hay que avisar por el disco, según el porcentaje de uso actual y si el último aviso fue de "disco lleno".
+ * Avisa una sola vez al pasar el límite, y una vez al volver a bajar (con margen).
+ */
+export function diskTransition(percent: number, alreadyAlerted: boolean, threshold: number): 'full' | 'ok' | null {
+  if (!alreadyAlerted && percent >= threshold) return 'full';
+  if (alreadyAlerted && percent < threshold - DISK_RECOVER_MARGIN) return 'ok';
+  return null;
+}
+
+const gb = (b: number) => `${(b / 1024 ** 3).toFixed(1)} GB`;
+
+export function diskNotice(p: { kind: 'full' | 'ok'; percent: number; free: number; total: number; threshold: number; freedBytes?: number }): Notice {
+  const state = `Uso: ${p.percent} % (${gb(p.free)} libres de ${gb(p.total)}).`;
+  return p.kind === 'full'
+    ? {
+        kind: 'disk_full', severity: 'error',
+        title: `Disco del servidor al ${p.percent} %`,
+        body: lines(
+          state,
+          `Se superó el límite de aviso (${p.threshold} %). Si el disco se llena fallan los deploys, los backups y las bases de datos.`,
+          p.freedBytes ? `La limpieza automática de imágenes viejas ya liberó ${gb(p.freedBytes)}.` : 'La limpieza automática de imágenes viejas no encontró nada para borrar.',
+          'Para liberar más: eliminar versiones y backups que ya no se necesiten, o ampliar el disco.',
+        ),
+      }
+    : { kind: 'disk_ok', severity: 'ok', title: `Disco del servidor de nuevo por debajo del límite (${p.percent} %)`, body: state };
 }
 
 export function backupFailedNotice(p: { app: AppRef; env: string; type: string; error: string }): Notice {
