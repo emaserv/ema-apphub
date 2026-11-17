@@ -1,6 +1,7 @@
 import { after, before, describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { ADMIN, api, login, newApp, one, Session, start, stop } from './helpers';
+import { decrypt } from '../../src/lib/crypto';
 
 let s: Session;
 before(async () => {
@@ -111,7 +112,6 @@ describe('variables secretas', () => {
     assert.equal(r.status, 200);
     const antes = await one(`SELECT value_enc FROM environment_variables WHERE key = 'DB_PASSWORD'`);
     assert.ok(antes.value_enc, 'la secreta sigue guardada');
-    const { decrypt } = await import('../../src/lib/crypto');
     assert.equal(decrypt(antes.value_enc), 'superSecreta123');
   });
 
@@ -122,7 +122,6 @@ describe('variables secretas', () => {
     assert.equal(r.status, 200, JSON.stringify(r.body));
     assert.equal(r.body.imported, 1, 'sólo LOG_LEVEL; la secreta vacía se saltea');
     assert.equal(r.body.restartRequired, false, 'no está desplegada');
-    const { decrypt } = await import('../../src/lib/crypto');
     assert.equal(decrypt((await one(`SELECT value_enc FROM environment_variables WHERE key = 'DB_PASSWORD'`)).value_enc), 'superSecreta123');
     assert.equal((await one(`SELECT value FROM environment_variables WHERE key = 'LOG_LEVEL'`)).value, 'debug');
   });
