@@ -1,4 +1,4 @@
-import { parse as parseCookie } from 'cookie';
+import { parseCookie } from 'cookie';
 import { randomUUID } from 'crypto';
 import { IncomingMessage, Server } from 'http';
 import { PassThrough } from 'stream';
