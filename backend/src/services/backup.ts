@@ -40,7 +40,7 @@ export async function backupApp(app: AppRow, env: EnvRow, userId: string | null,
     const manifest = {
       kind: 'ema-apphub-app-backup', formatVersion: 1, createdAt: new Date().toISOString(),
       application: { slug: app.slug, name: app.name, technology: app.technology, internalPort: app.internal_port, healthcheckPath: app.healthcheck_path, buildConfig: app.build_config },
-      environment: { name: env.name, internalPort: env.internal_port, externalPort: env.external_port, domain: env.domain, volumes: env.volumes },
+      environment: { name: env.name, internalPort: env.internal_port, externalPort: env.external_port, domain: env.domain, pathPrefix: env.path_prefix, volumes: env.volumes },
       version: { version: v.version, dockerfile: v.dockerfile, commit: v.commit_sha, comment: v.comment, buildConfig: v.build_config },
       variables: vars, // valores secretos permanecen cifrados con MASTER_KEY
       envSnapshotEnc: await envSnapshot(env.id),

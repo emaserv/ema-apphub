@@ -101,6 +101,34 @@ describe('Traefik (dominio y HTTPS)', () => {
     });
   });
 
+  test('por ruta: /holaema y lo de abajo, sin la ruta, por http (el HTTPS lo pone el proxy de adelante)', () => {
+    withConfig({ traefikEnabled: true }, () => {
+      const l = app({ pathPrefix: '/holaema' }).labels;
+      const r = 'traefik.http.routers.ema-tienda-production';
+      assert.equal(l['traefik.enable'], 'true');
+      assert.equal(l[`${r}.rule`], '(Path(`/holaema`) || PathPrefix(`/holaema/`))');
+      assert.equal(l[`${r}.entrypoints`], 'web');
+      assert.equal(l[`${r}.middlewares`], 'ema-tienda-production-strip');
+      assert.equal(l['traefik.http.middlewares.ema-tienda-production-strip.stripprefix.prefixes'], '/holaema');
+      assert.equal(l[`${r}.tls`], undefined);
+      assert.equal(l[`${r}-http.rule`], undefined);
+    });
+  });
+
+  test('por ruta con dominio: exige los dos (para un dominio sólo de apps, ej. apps.empresa.com/holaema)', () => {
+    withConfig({ traefikEnabled: true }, () => {
+      const l = app({ pathPrefix: '/holaema', domain: 'apps.ema.com.ar' }).labels;
+      assert.equal(l['traefik.http.routers.ema-tienda-production.rule'], 'Host(`apps.ema.com.ar`) && (Path(`/holaema`) || PathPrefix(`/holaema/`))');
+      assert.equal(l['traefik.http.routers.ema-tienda-production.tls'], undefined);
+    });
+  });
+
+  test('por ruta con Traefik desactivado en el servidor: se ignora', () => {
+    withConfig({ traefikEnabled: false }, () => {
+      assert.equal(app({ pathPrefix: '/holaema' }).labels['traefik.enable'], 'false');
+    });
+  });
+
   test('usa la red de apps configurada', () => {
     withConfig({ traefikEnabled: true, appsNetwork: 'otra_red' }, () => {
       const doc = compose({ domain: 'x.com' });

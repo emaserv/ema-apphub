@@ -41,6 +41,7 @@ sudo nano /opt/ema-apphub/.env
 | `COOKIE_SECURE` | `true` | `false` |
 | `PUBLIC_HOST` | IP o nombre del servidor (el instalador pone la primera IP; verificarla) | igual |
 | `APPS_BASE_DOMAIN` | dominio base para las apps, ej. `emaservicios.com.ar` | dejar el valor |
+| `APPS_PATH_BASE_URL` | si las apps se publican por ruta (`…/holaema/`): la dirección con la que entran los usuarios, ej. `https://apphub.emaservicios.com.ar` | vacío (usa `http://IP:8080`) |
 | `DATA_DIR` | `/opt/ema-apphub/data` (disco con espacio y persistente) | igual |
 | `TERMINAL_ENABLED` | `true` o `false` según se quiera permitir la terminal web | igual |
 | `DEFAULT_MEMORY_LIMIT_MB` | memoria máxima de cada ambiente nuevo (`512`); subirla si las apps suelen necesitar más | igual |

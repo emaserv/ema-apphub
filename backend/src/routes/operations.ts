@@ -4,6 +4,7 @@ import path from 'path';
 import { z } from 'zod';
 import { paths } from '../config';
 import { one, q } from '../db/pool';
+import { normalizeAppPath } from '../lib/appPath';
 import { decrypt, MASK } from '../lib/crypto';
 import { ah, badRequest, conflict, notFound, parse } from '../lib/http';
 import { parseDotenv, SECRET_KEY_RE, toDotenvLine } from '../lib/util';
@@ -12,7 +13,7 @@ import { createEnvironment, updateFromGit, validateVolume } from '../services/ap
 import { appAccessParam } from '../services/appAccess';
 import { audit } from '../services/audit';
 import {
-  appUrl, assertPortFree, currentImageFor, envProject, getApp, getEnv, getVersion, imageTag, listVars, nextFreePort, upsertVar, writeEnvFiles,
+  appUrl, assertPathFree, assertPortFree, currentImageFor, envProject, getApp, getEnv, getVersion, imageTag, listVars, nextFreePort, upsertVar, writeEnvFiles,
 } from '../services/core';
 import { enqueueDeploy, lifecycle, teardown } from '../services/deploy';
 import { promotionError } from '../services/promote';
@@ -148,6 +149,7 @@ const ENV_UPDATE = z.object({
   internalPort: PORT.nullable().optional(),
   domain: z.string().max(255).regex(/^[a-z0-9.-]*$/i).nullable().optional(),
   httpsEnabled: z.boolean().optional(),
+  pathPrefix: z.string().max(70).nullable().optional(),
   volumes: z.array(z.object({ source: z.string().min(1).max(200), target: z.string().min(1).max(255), type: z.enum(['volume', 'bind']), readOnly: z.boolean().optional() })).max(20).optional(),
   extraPorts: z.array(z.object({ internal: PORT, external: PORT, protocol: z.enum(['tcp', 'udp']).optional() })).max(10).optional(),
   memoryLimitMb: z.number().int().positive().nullable().optional(),
@@ -169,7 +171,7 @@ r.post('/applications/:id/environments', requirePerm('apps.edit'), ah(async (req
   b.volumes?.forEach(validateVolume);
   const env = await createEnvironment(app, {
     name: b.name, externalPort: b.externalPort === undefined ? await nextFreePort() : b.externalPort, internalPort: b.internalPort,
-    domain: b.domain, httpsEnabled: b.httpsEnabled, volumes: b.volumes, memoryLimitMb: b.memoryLimitMb, cpuLimit: b.cpuLimit,
+    domain: b.domain, httpsEnabled: b.httpsEnabled, pathPrefix: b.pathPrefix, volumes: b.volumes, memoryLimitMb: b.memoryLimitMb, cpuLimit: b.cpuLimit,
   }, false, req.user!.seesAllApps);
   if (b.copyVariablesFrom) {
     const src = await getEnv(app.id, b.copyVariablesFrom);
@@ -191,10 +193,12 @@ r.put('/applications/:id/environments/:name', requirePerm('apps.edit'), ah(async
     const d = await one(`SELECT 1 FROM application_environments WHERE lower(domain)=lower($1) AND id<>$2`, [b.domain, env.id]);
     if (d) throw conflict('El dominio ya está asignado a otra aplicación');
   }
+  const pathPrefix = b.pathPrefix === undefined ? undefined : normalizeAppPath(b.pathPrefix);
+  if (pathPrefix) await assertPathFree(pathPrefix, env.id);
   if (b.isDefault) await q(`UPDATE application_environments SET is_default=false WHERE application_id=$1`, [app.id]);
   const map: Record<string, unknown> = {
     external_port: b.externalPort, internal_port: b.internalPort, domain: b.domain === undefined ? undefined : b.domain?.toLowerCase() || null,
-    https_enabled: b.httpsEnabled, volumes: b.volumes && JSON.stringify(b.volumes), extra_ports: b.extraPorts && JSON.stringify(b.extraPorts),
+    https_enabled: b.httpsEnabled, path_prefix: pathPrefix, volumes: b.volumes && JSON.stringify(b.volumes), extra_ports: b.extraPorts && JSON.stringify(b.extraPorts),
     memory_limit_mb: b.memoryLimitMb, cpu_limit: b.cpuLimit, is_default: b.isDefault,
   };
   const sets: string[] = []; const vals: unknown[] = [env.id];
@@ -224,7 +228,8 @@ r.get('/applications/:id/compose', requirePerm('apps.view'), ah(async (req, res)
   const db = await one(`SELECT * FROM databases WHERE environment_id=$1`, [env.id]);
   res.json({ generated: false, compose: generateCompose({
     slug: app.slug, env: env.name, image: (await currentImageFor(app, env)) ?? imageTag(app.slug, 'x.y.z'), internalPort: env.internal_port || app.internal_port,
-    externalPort: env.external_port, domain: env.domain, httpsEnabled: env.https_enabled, volumes: env.volumes, extraPorts: env.extra_ports,
+    externalPort: env.external_port, domain: env.domain, httpsEnabled: env.https_enabled, pathPrefix: env.path_prefix,
+    volumes: env.volumes, extraPorts: env.extra_ports,
     database: db ? { engine: db.engine, version: db.engine_version, databaseName: db.database_name } : null,
   }) });
 }));

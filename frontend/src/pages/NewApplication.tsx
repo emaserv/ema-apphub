@@ -47,6 +47,7 @@ export default function NewApplication() {
   const [portMsg, setPortMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [domain, setDomain] = useState('');
   const [https, setHttps] = useState(true);
+  const [pathPrefix, setPathPrefix] = useState('');
   const [vars, setVars] = useState<VarRow[]>([]);
   const [volumes, setVolumes] = useState<VolumeRow[]>([]);
   const [version, setVersion] = useState('1.0.0');
@@ -130,7 +131,7 @@ export default function NewApplication() {
       frameworkLabel: techs.find((t) => t.id === technology)?.label, internalPort, healthcheckPath: healthPath, buildConfig,
       dockerfile: method === 'empty' ? undefined : dockerfile, stagingId: analysis?.stagingId, version, comment,
       sourceType: method === 'git' ? 'git' : method === 'files' ? 'upload' : 'zip',
-      environment: { name: envName, externalPort: externalPort === '' ? null : Number(externalPort), domain: domain || null, httpsEnabled: https,
+      environment: { name: envName, externalPort: externalPort === '' ? null : Number(externalPort), domain: domain || null, httpsEnabled: https, pathPrefix: pathPrefix || null,
         volumes: volumes.filter((v) => v.source && v.target), variables: vars.filter((v) => v.key).map(({ key, value, isSecret }) => ({ key, value, isSecret })) },
       createDatabase: createDb, database: createDb ? { databaseName: dbName, username: dbUser } : undefined,
       deploy: deploy && canDeployEnv && method !== 'empty',
@@ -306,7 +307,11 @@ export default function NewApplication() {
               </Field>
               <Field label="Dominio" hint="Requiere DNS apuntando al servidor"><input className="input mono" value={domain} onChange={(e) => setDomain(e.target.value.trim().toLowerCase())} placeholder="crm.emaservicios.com.ar" /></Field>
               <Field label="HTTPS"><Switch checked={https} onChange={setHttps} label="Let's Encrypt + redirección" /></Field>
+              <Field label="Ruta" hint={pathPrefix ? `Se abrirá en …/${pathPrefix.replace(/^\/+|\/+$/g, '')}/` : 'Publicar en una ruta del dominio de AppHub (ej. /holaema)'}>
+                <input className="input mono" value={pathPrefix} onChange={(e) => setPathPrefix(e.target.value.trim().toLowerCase())} placeholder={`/${slug || 'mi-app'}`} />
+              </Field>
             </div>
+            {pathPrefix && <div className="alert info">La app tiene que estar preparada para funcionar dentro de una ruta: recibe las direcciones sin la ruta y la ruta original en el encabezado <code>X-Forwarded-Prefix</code>. Si arma enlaces o pide archivos con "/" al principio, configure su ruta base (ver el instructivo).</div>}
           </div>
           <div className="card stack"><h3>Variables de entorno</h3><VarsEditor rows={vars} onChange={setVars} /></div>
           <div className="card stack"><h3>Volúmenes persistentes</h3><VolumesEditor rows={volumes} onChange={setVolumes} /></div>
@@ -340,7 +345,7 @@ export default function NewApplication() {
               <div><span className="muted">Tecnología</span><div>{techs.find((t) => t.id === technology)?.label}</div></div>
               <div><span className="muted">Versión</span><div>v{version}</div></div>
               <div><span className="muted">Ambiente</span><div>{ENV_LABEL[envName]}</div></div>
-              <div><span className="muted">Acceso</span><div>{domain ? `${https ? 'https' : 'http'}://${domain}` : externalPort ? `Puerto ${externalPort} → ${internalPort}` : 'Interno'}</div></div>
+              <div><span className="muted">Acceso</span><div>{pathPrefix ? `Ruta /${pathPrefix.replace(/^\/+|\/+$/g, '')}/` : domain ? `${https ? 'https' : 'http'}://${domain}` : externalPort ? `Puerto ${externalPort} → ${internalPort}` : 'Interno'}</div></div>
               <div><span className="muted">Variables / volúmenes</span><div>{vars.filter((v) => v.key).length} / {volumes.length}</div></div>
             </div>
             {method !== 'empty' && <Switch checked={deploy && canDeployEnv} disabled={!canDeployEnv} onChange={setDeploy} label={<b>Construir imagen y desplegar ahora</b>} />}

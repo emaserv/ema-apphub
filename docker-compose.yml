@@ -15,6 +15,9 @@ services:
       - --providers.file.directory=/etc/traefik/dynamic
       - --providers.file.watch=true
       - --entrypoints.web.address=:80
+      # Confía en los X-Forwarded-* (protocolo, IP del usuario) que mandan los proxies de la red interna: el nginx de AppHub
+      # y el de la empresa. Sin esto las apps creen que el usuario entró por http aunque haya entrado por https.
+      - --entrypoints.web.forwardedHeaders.trustedIPs=${TRAEFIK_TRUSTED_IPS:-10.0.0.0/8,172.16.0.0/12,192.168.0.0/16}
       - --entrypoints.websecure.address=:443
       - --certificatesresolvers.letsencrypt.acme.email=${ACME_EMAIL:-admin@example.com}
       - --certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json
@@ -79,6 +82,7 @@ services:
       PORT_RANGE_START: ${PORT_RANGE_START:-8100}
       PORT_RANGE_END: ${PORT_RANGE_END:-8999}
       PLATFORM_HTTP_PORT: ${PLATFORM_HTTP_PORT:-8080}
+      APPS_PATH_BASE_URL: ${APPS_PATH_BASE_URL:-}
       MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-500}
       HEALTH_INTERVAL_SEC: ${HEALTH_INTERVAL_SEC:-60}
       DEPLOY_HEALTH_WAIT_SEC: ${DEPLOY_HEALTH_WAIT_SEC:-90}
@@ -110,11 +114,13 @@ services:
       traefik.enable: "true"
       traefik.docker.network: ${APPS_NETWORK:-ema_apps}
       traefik.http.services.apphub.loadbalancer.server.port: "80"
-      traefik.http.routers.apphub.rule: Host(`${PLATFORM_DOMAIN:-apphub.localhost}`)
+      # X-Ema-Apps lo pone el nginx de AppHub al pasarle a Traefik un pedido para una app publicada por ruta
+      # (ej. /holaema/): esos pedidos traen el dominio de AppHub, pero no tienen que volver a AppHub.
+      traefik.http.routers.apphub.rule: Host(`${PLATFORM_DOMAIN:-apphub.localhost}`) && !Header(`X-Ema-Apps`, `1`)
       traefik.http.routers.apphub.entrypoints: websecure
       traefik.http.routers.apphub.tls: "true"
       traefik.http.routers.apphub.tls.certresolver: letsencrypt
-      traefik.http.routers.apphub-http.rule: Host(`${PLATFORM_DOMAIN:-apphub.localhost}`)
+      traefik.http.routers.apphub-http.rule: Host(`${PLATFORM_DOMAIN:-apphub.localhost}`) && !Header(`X-Ema-Apps`, `1`)
       traefik.http.routers.apphub-http.entrypoints: web
       traefik.http.routers.apphub-http.middlewares: redirect-to-https@file
     networks: [internal, ema_apps]
