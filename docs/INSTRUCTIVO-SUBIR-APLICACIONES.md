@@ -43,6 +43,8 @@ app.listen(process.env.PORT || 3000, '0.0.0.0');
 | Deploy y rollback en **Producción** | ✔ | ✔ | — | — |
 | Variables, puertos, dominios | ✔ | ✔ | (ver) | — |
 | Bases de datos y backups | ✔ | ✔ | (ver) | — |
+| Ver registros de las tablas (pestaña Base de datos → Datos) | ✔ | ✔ | ✔ | — |
+| Agregar, editar y eliminar registros | ✔ | ✔ | — | — |
 | Terminal web | ✔ | — | — | — |
 | Usuarios y roles | ✔ | — | — | — |
 | Asignar quién trabaja en cada aplicación (pestaña **Accesos**) | ✔ | ✔ | — | — |
@@ -243,6 +245,12 @@ Pestaña **Base de datos**:
 * **Usuarios**: cree usuarios de *sólo lectura* (ej. para reportes/BI) o *lectura-escritura*.
 * **Cambiar contraseña**: genera una nueva; si es el propietario, se actualiza `DATABASE_URL` y se recrea la app automáticamente.
 * **Reiniciar**, **Backup ahora**, **Eliminar** (pide confirmación escribiendo el identificador).
+* **Datos**: lista las tablas (y vistas) de la base; al elegir una se ven sus registros, de a 50, ordenables por columna.
+  * Superadmin y Administrador pueden además **agregar**, **editar** y **eliminar** registros. Desarrollador sólo ve.
+  * Sólo se pueden modificar tablas con **clave primaria** (🔑): así cada cambio afecta exactamente un registro. Las vistas y tablas sin clave primaria son de sólo lectura (🔒).
+  * Al agregar, los campos vacíos toman su valor por defecto. Las columnas que calcula la base (identity, generadas) no se pueden escribir, y la clave primaria no se modifica.
+  * La base valida cada cambio (tipos, campos obligatorios, claves únicas y foráneas) y, si lo rechaza, muestra el motivo.
+  * Cada alta, edición y eliminación queda en la **auditoría** (tabla, columnas e identificador del registro; no los valores).
 * Para conectarse con una herramienta externa (DBeaver, pgAdmin), solicite a un administrador un usuario de sólo lectura y el acceso de red correspondiente: por seguridad el puerto 5432 de las apps no se publica.
 
 ---

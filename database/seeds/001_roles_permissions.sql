@@ -19,6 +19,7 @@ INSERT INTO permissions (code, description) VALUES
  ('versions.create',    'Subir código y crear versiones'),
  ('db.view',            'Ver bases de datos y conexión'),
  ('db.manage',          'Crear, eliminar, reiniciar bases y administrar usuarios'),
+ ('db.data.edit',       'Agregar, editar y eliminar registros de las bases desde el panel de datos'),
  ('backups.view',       'Ver historial de backups'),
  ('backups.manage',     'Crear, restaurar, descargar y programar backups'),
  ('docker.view',        'Ver contenedores e imágenes'),
