@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Plus, RotateCw, Save, Trash2 } from 'lucide-react';
-import { api, ENV_LABEL } from '../../api/client';
+import { api, ENV_LABEL, SHOW_DOMAIN } from '../../api/client';
 import { useAuth } from '../../auth';
 import { VolumeRow, VolumesEditor } from '../../components/Editors';
 import { Confirm, Field, Switch, useAction } from '../../components/ui';
@@ -22,6 +22,9 @@ export default function EnvironmentTab({ app, env, reload }: TabProps) {
       pathPrefix: env.path_prefix ?? '', memoryLimitMb: env.memory_limit_mb ?? '', cpuLimit: env.cpu_limit ?? '', isDefault: env.is_default });
     setVolumes(env.volumes ?? []); setExtra(env.extra_ports ?? []); setRestart(false);
   }, [env]);
+
+  // La ruta es obligatoria salvo que el ambiente tenga dominio propio
+  const pathMissing = !String(f.pathPrefix ?? '').replace(/\//g, '') && !f.domain;
 
   const check = async () => {
     if (!f.externalPort || Number(f.externalPort) === env.external_port) return setPortMsg(null);
@@ -68,25 +71,27 @@ export default function EnvironmentTab({ app, env, reload }: TabProps) {
         {!ro && <div><button className="btn sm outline" onClick={() => setExtra([...extra, { internal: 0, external: 0 }])}><Plus size={14} />Agregar puerto</button></div>}
       </div>
       <div className="card stack">
-        <h3>Dominio</h3>
+        <h3>Publicación</h3>
         <div className="grid c3">
-          <Field label="Dominio" hint="Traefik enruta el dominio al contenedor. Configure el DNS hacia este servidor."><input className="input mono" disabled={ro} value={f.domain} onChange={(e) => setF({ ...f, domain: e.target.value.trim().toLowerCase() })} placeholder="crm.emaservicios.com.ar" /></Field>
-          <Field label="HTTPS"><Switch checked={!!f.httpsEnabled} disabled={ro} onChange={(v) => setF({ ...f, httpsEnabled: v })} label="Certificado Let's Encrypt + redirección HTTP→HTTPS" /></Field>
-          <Field label="Ambiente principal"><Switch checked={!!f.isDefault} disabled={ro || env.is_default} onChange={(v) => setF({ ...f, isDefault: v })} label="Usar como ambiente por defecto" /></Field>
-        </div>
-        <div className="grid c3">
-          <Field label="Ruta" hint="Publica la app en una ruta del dominio de AppHub (ej. /holaema → …/holaema/). Debe ser única entre todos los ambientes.">
+          <Field label="Ruta *" hint={pathMissing ? <span style={{ color: 'var(--err)' }}>Obligatoria (ej. /{app.slug})</span> : 'Publica la app en una ruta del dominio de AppHub (ej. /holaema → …/holaema/). Debe ser única entre todos los ambientes.'}>
             <input className="input mono" disabled={ro} value={f.pathPrefix ?? ''} onChange={(e) => setF({ ...f, pathPrefix: e.target.value.trim().toLowerCase() })} placeholder={`/${app.slug}`} />
           </Field>
-          {env.path_prefix && env.url && <Field label="Dirección"><a className="mono" href={env.url} target="_blank" rel="noreferrer">{env.url}</a></Field>}
+          <Field label="Dirección">{env.url ? <a className="mono" href={env.url} target="_blank" rel="noreferrer">{env.url}</a> : <span className="muted">Sin publicar</span>}</Field>
+          <Field label="Ambiente principal"><Switch checked={!!f.isDefault} disabled={ro || env.is_default} onChange={(v) => setF({ ...f, isDefault: v })} label="Usar como ambiente por defecto" /></Field>
         </div>
+        {(SHOW_DOMAIN || env.domain) && (
+          <div className="grid c3">
+            <Field label="Dominio" hint="Opcional. Subdominio propio para la app (requiere DNS hacia este servidor). Para publicar sólo por ruta, dejar vacío."><input className="input mono" disabled={ro} value={f.domain} onChange={(e) => setF({ ...f, domain: e.target.value.trim().toLowerCase() })} placeholder="crm.emaservicios.com.ar" /></Field>
+            <Field label="HTTPS"><Switch checked={!!f.httpsEnabled} disabled={ro} onChange={(v) => setF({ ...f, httpsEnabled: v })} label="Certificado Let's Encrypt + redirección HTTP→HTTPS" /></Field>
+          </div>
+        )}
         {f.pathPrefix && <div className="alert info">La app recibe las direcciones sin la ruta (<code>/holaema/clientes</code> → <code>/clientes</code>) y la ruta original en el encabezado <code>X-Forwarded-Prefix</code>. Si arma enlaces o pide archivos con "/" al principio, hay que configurarle su ruta base (ver el instructivo).</div>}
       </div>
       <div className="card stack"><h3>Volúmenes</h3><VolumesEditor rows={volumes} onChange={setVolumes} readOnly={ro} /></div>
       {!ro && (
         <div className="row">
           {can('apps.delete') && app.environments.length > 1 && <button className="btn danger" onClick={() => setDel(true)}><Trash2 size={14} />Eliminar ambiente {ENV_LABEL[env.name]}</button>}
-          <button className="btn primary right" disabled={busy} onClick={save}><Save size={14} />Guardar configuración</button>
+          <button className="btn primary right" disabled={busy || pathMissing} title={pathMissing ? 'Complete la ruta' : undefined} onClick={save}><Save size={14} />Guardar configuración</button>
         </div>
       )}
       {del && <Confirm title={`Eliminar ambiente ${ENV_LABEL[env.name]}`} danger requireText={env.name} confirmLabel="Eliminar"

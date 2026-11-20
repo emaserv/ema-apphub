@@ -116,7 +116,8 @@ Si cambia la tecnología, use **Regenerar Dockerfile**.
 1. **Ambiente**: normalmente *Producción* para la primera publicación (o *Desarrollo* para pruebas).
 2. **Puerto externo**: se sugiere uno libre (rango 8100–8999). La app quedará en `http://IP-DEL-SERVIDOR:PUERTO`. Al salir del campo se verifica que no esté en uso. Puede dejarlo vacío si sólo se accederá por dominio.
 3. **Dominio** (opcional): ej. `crm.emaservicios.com.ar`. Antes, pida a Sistemas que cree el registro DNS apuntando al servidor. Con **HTTPS** activo se emite el certificado Let's Encrypt y se redirige HTTP→HTTPS.
-   **Ruta** (opcional): publica la app dentro del dominio de AppHub, ej. `/crm` → `https://apphub.emaservicios.com.ar/crm/`. No requiere DNS. Ver [Apps publicadas por ruta](#apps-publicadas-por-ruta).
+   **Ruta** (obligatoria): publica la app dentro del dominio de AppHub, ej. `/crm` → `https://apphub.emaservicios.com.ar/crm/`. No requiere DNS. Se propone `/<identificador>` y se puede cambiar. Ver [Apps publicadas por ruta](#apps-publicadas-por-ruta).
+   *(Mientras las apps se publiquen por ruta, los campos Dominio y HTTPS están ocultos.)*
 4. **Variables de entorno**:
    * *Agregar variable* o *Pegar / importar .env* (pegue el contenido de su `.env`).
    * Marque como **Secreta** toda contraseña, token o clave (se detectan automáticamente las que contienen PASSWORD, SECRET, TOKEN o KEY).
@@ -187,7 +188,7 @@ Código → Validación → Build → Tests → Imagen → Deploy → Health che
 
 ### Apps publicadas por ruta
 
-En **Puertos y dominio → Ruta** se puede publicar un ambiente en una ruta del dominio de AppHub, por ejemplo `/crm` → `https://apphub.emaservicios.com.ar/crm/`. No hace falta pedir DNS. Cada ruta se usa en **un solo ambiente** (para publicar Producción y Staging, use por ejemplo `/crm` y `/crm-staging`). No se pueden usar las rutas de la propia AppHub (`/api`, `/aplicaciones`, `/login`, etc.).
+Cada ambiente se publica en una ruta del dominio de AppHub (**Puertos y dominio → Ruta**, obligatoria), por ejemplo `/crm` → `https://apphub.emaservicios.com.ar/crm/`. No hace falta pedir DNS. Cada ruta se usa en **un solo ambiente**: si no se indica, AppHub propone `/<identificador>` para el primero y `/<identificador>-<ambiente>` para los siguientes (ej. `/crm` y `/crm-staging`). Para cambiarla: editar, **Guardar configuración** y **Aplicar ahora**. No se pueden usar las rutas de la propia AppHub (`/api`, `/aplicaciones`, `/login`, etc.).
 
 **Qué recibe la app.** AppHub le quita la ruta a cada pedido: `/crm/clientes` llega como `/clientes`, y la ruta original va en el encabezado `X-Forwarded-Prefix: /crm`. Si se entra a `/crm` sin la barra final, se redirige a `/crm/`.
 

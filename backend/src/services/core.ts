@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { config, paths } from '../config';
 import { one, q } from '../db/pool';
+import { RESERVED_PATHS } from '../lib/appPath';
 import { decrypt, encrypt } from '../lib/crypto';
 import { conflict, notFound } from '../lib/http';
 import { projectName, toDotenvLine } from '../lib/util';
@@ -120,6 +121,20 @@ export async function assertPathFree(pathPrefix: string, envId: string | null) {
   const other = await one(`SELECT 1 FROM application_environments WHERE lower(path_prefix)=lower($1) AND ($2::uuid IS NULL OR id <> $2)`,
     [pathPrefix, envId]);
   if (other) throw conflict(`La ruta ${pathPrefix} ya está asignada a otra aplicación`);
+}
+
+/**
+ * Ruta que se propone a un ambiente que no indicó ninguna: "/<app>" y, si ya está usada (otro ambiente de la misma app)
+ * o es de AppHub, "/<app>-<ambiente>", "/<app>-2", "/<app>-3"…
+ */
+export async function defaultAppPath(slug: string, envName: string): Promise<string> {
+  const base = slug.slice(0, 50);
+  const candidates = [base, `${base}-${envName}`.slice(0, 63), ...Array.from({ length: 50 }, (_, i) => `${base}-${i + 2}`)];
+  for (const c of candidates) {
+    if ((RESERVED_PATHS as readonly string[]).includes(c)) continue;
+    if (!(await one(`SELECT 1 FROM application_environments WHERE lower(path_prefix)=lower($1)`, [`/${c}`]))) return `/${c}`;
+  }
+  throw conflict('No se pudo proponer una ruta libre: indique una');
 }
 
 export async function nextFreePort(): Promise<number> {

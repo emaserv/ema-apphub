@@ -78,5 +78,12 @@ export const fmtAgo = (d?: string | null) => {
   return `hace ${Math.floor(s / 86400)} d`;
 };
 
+/**
+ * Campos Dominio y HTTPS de cada ambiente. Ocultos mientras las apps se publiquen sólo por ruta (…/holaema/):
+ * no hay DNS para subdominios. Siguen visibles en los ambientes que ya tengan un dominio cargado.
+ * Volver a true al migrar a un dominio para apps (ej. apps.emaservicios.com.ar + ruta) o a un subdominio por app.
+ */
+export const SHOW_DOMAIN = false;
+
 export const ENV_LABEL: Record<string, string> = { development: 'Desarrollo', test: 'Test', staging: 'Staging', production: 'Producción' };
 export const ENV_ORDER = ['development', 'test', 'staging', 'production'];

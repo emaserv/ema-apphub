@@ -1,7 +1,7 @@
 import { DragEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { AlertTriangle, ArrowLeft, ArrowRight, Check, FileArchive, FolderUp, GitBranch, PackagePlus, RefreshCw, Rocket, Wand2 } from 'lucide-react';
-import { api, ENV_LABEL, fmtBytes, uploadForm } from '../api/client';
+import { api, ENV_LABEL, fmtBytes, SHOW_DOMAIN, uploadForm } from '../api/client';
 import { useAuth } from '../auth';
 import CodeEditor from '../components/CodeEditor';
 import DeploymentLog from '../components/DeploymentLog';
@@ -48,6 +48,9 @@ export default function NewApplication() {
   const [domain, setDomain] = useState('');
   const [https, setHttps] = useState(true);
   const [pathPrefix, setPathPrefix] = useState('');
+  const [pathTouched, setPathTouched] = useState(false);
+  // La ruta es obligatoria: se propone /<identificador> hasta que el usuario la cambie
+  const pathMissing = !pathPrefix.replace(/\//g, '') && !domain;
   const [vars, setVars] = useState<VarRow[]>([]);
   const [volumes, setVolumes] = useState<VolumeRow[]>([]);
   const [version, setVersion] = useState('1.0.0');
@@ -62,6 +65,7 @@ export default function NewApplication() {
 
   useEffect(() => { api<any[]>('/applications/technologies').then(setTechs).catch(() => undefined); }, []);
   useEffect(() => { if (!slugTouched) setSlug(slugify(name)); }, [name, slugTouched]);
+  useEffect(() => { if (!pathTouched) setPathPrefix(slug ? `/${slug}` : ''); }, [slug, pathTouched]);
   useEffect(() => { api('/system/ports/check').then((r) => setExternalPort(r.suggested)).catch(() => undefined); }, []);
   useEffect(() => { const s = slug.replace(/-/g, '_'); setDbName(s); setDbUser(`${s}_user`); }, [slug]);
 
@@ -302,13 +306,15 @@ export default function NewApplication() {
               <Field label="Ambiente">
                 <select className="input" value={envName} onChange={(e) => setEnvName(e.target.value)}>{Object.entries(ENV_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select>
               </Field>
-              <Field label="Puerto externo" hint={portMsg ? <span style={{ color: portMsg.ok ? 'var(--ok)' : 'var(--err)' }}>{portMsg.text}</span> : 'Vacío = sólo accesible por dominio'}>
+              <Field label="Puerto externo" hint={portMsg ? <span style={{ color: portMsg.ok ? 'var(--ok)' : 'var(--err)' }}>{portMsg.text}</span> : 'Vacío = sólo accesible por ruta o dominio'}>
                 <input className="input" type="number" value={externalPort} onChange={(e) => setExternalPort(e.target.value ? Number(e.target.value) : '')} onBlur={() => checkPort(externalPort)} />
               </Field>
-              <Field label="Dominio" hint="Requiere DNS apuntando al servidor"><input className="input mono" value={domain} onChange={(e) => setDomain(e.target.value.trim().toLowerCase())} placeholder="crm.emaservicios.com.ar" /></Field>
-              <Field label="HTTPS"><Switch checked={https} onChange={setHttps} label="Let's Encrypt + redirección" /></Field>
-              <Field label="Ruta" hint={pathPrefix ? `Se abrirá en …/${pathPrefix.replace(/^\/+|\/+$/g, '')}/` : 'Publicar en una ruta del dominio de AppHub (ej. /holaema)'}>
-                <input className="input mono" value={pathPrefix} onChange={(e) => setPathPrefix(e.target.value.trim().toLowerCase())} placeholder={`/${slug || 'mi-app'}`} />
+              {SHOW_DOMAIN && <>
+                <Field label="Dominio" hint="Opcional. Requiere DNS apuntando al servidor"><input className="input mono" value={domain} onChange={(e) => setDomain(e.target.value.trim().toLowerCase())} placeholder="crm.emaservicios.com.ar" /></Field>
+                <Field label="HTTPS"><Switch checked={https} onChange={setHttps} label="Let's Encrypt + redirección" /></Field>
+              </>}
+              <Field label="Ruta *" hint={pathMissing ? <span style={{ color: 'var(--err)' }}>Obligatoria (ej. /holaema)</span> : `Se abrirá en …/${pathPrefix.replace(/^\/+|\/+$/g, '')}/`}>
+                <input className="input mono" value={pathPrefix} onChange={(e) => { setPathTouched(true); setPathPrefix(e.target.value.trim().toLowerCase()); }} placeholder={`/${slug || 'mi-app'}`} />
               </Field>
             </div>
             {pathPrefix && <div className="alert info">La app tiene que estar preparada para funcionar dentro de una ruta: recibe las direcciones sin la ruta y la ruta original en el encabezado <code>X-Forwarded-Prefix</code>. Si arma enlaces o pide archivos con "/" al principio, configure su ruta base (ver el instructivo).</div>}
@@ -319,7 +325,7 @@ export default function NewApplication() {
             <Field label="Versión"><input className="input mono" value={version} onChange={(e) => setVersion(e.target.value)} /></Field>
             <Field label="Comentario de la versión"><input className="input" value={comment} onChange={(e) => setComment(e.target.value)} /></Field>
           </div>
-          <div className="row"><button className="btn outline" onClick={() => setStep(1)}><ArrowLeft size={15} />Atrás</button><button className="btn primary right" onClick={() => setStep(3)}>Siguiente<ArrowRight size={15} /></button></div>
+          <div className="row"><button className="btn outline" onClick={() => setStep(1)}><ArrowLeft size={15} />Atrás</button><button className="btn primary right" disabled={pathMissing} title={pathMissing ? 'Complete la ruta' : undefined} onClick={() => setStep(3)}>Siguiente<ArrowRight size={15} /></button></div>
         </div>
       )}
 
