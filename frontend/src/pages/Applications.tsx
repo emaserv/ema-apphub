@@ -4,6 +4,7 @@ import { LayoutGrid, List, Plus, Search } from 'lucide-react';
 import { api, ENV_LABEL, fmtDate } from '../api/client';
 import { useAuth } from '../auth';
 import AppCard from '../components/AppCard';
+import DownloadPromptButton from '../components/DownloadPromptButton';
 import { Empty, Spinner, StatusBadge, useData } from '../components/ui';
 
 const TITLES: Record<string, string> = { running: 'Ejecutando', stopped: 'Detenidas', error: 'Con error' };
@@ -32,6 +33,7 @@ export default function Applications() {
             <button className={view === 'table' ? 'active' : ''} onClick={() => setV('table')}><List size={14} /></button>
             <button className={view === 'cards' ? 'active' : ''} onClick={() => setV('cards')}><LayoutGrid size={14} /></button>
           </div>
+          {can('apps.create') && <DownloadPromptButton />}
           {can('apps.create') && <button className="btn primary" onClick={() => nav('/aplicaciones/nueva')}><Plus size={16} />Nueva aplicación</button>}
         </div>
       </div>
