@@ -73,7 +73,7 @@ export default function EnvironmentTab({ app, env, reload }: TabProps) {
       <div className="card stack">
         <h3>Publicación</h3>
         <div className="grid c3">
-          <Field label="Ruta *" hint={pathMissing ? <span style={{ color: 'var(--err)' }}>Obligatoria (ej. /{app.slug})</span> : 'Publica la app en una ruta del dominio de AppHub (ej. /holaema → …/holaema/). Debe ser única entre todos los ambientes.'}>
+          <Field label="Ruta *" hint={pathMissing ? <span style={{ color: 'var(--err)' }}>Obligatoria (ej. /{app.slug})</span> : 'Única por ambiente. La app debe funcionar dentro de esta ruta (ver instructivo)'}>
             <input className="input mono" disabled={ro} value={f.pathPrefix ?? ''} onChange={(e) => setF({ ...f, pathPrefix: e.target.value.trim().toLowerCase() })} placeholder={`/${app.slug}`} />
           </Field>
           <Field label="Dirección">{env.url ? <a className="mono" href={env.url} target="_blank" rel="noreferrer">{env.url}</a> : <span className="muted">Sin publicar</span>}</Field>
@@ -85,7 +85,6 @@ export default function EnvironmentTab({ app, env, reload }: TabProps) {
             <Field label="HTTPS"><Switch checked={!!f.httpsEnabled} disabled={ro} onChange={(v) => setF({ ...f, httpsEnabled: v })} label="Certificado Let's Encrypt + redirección HTTP→HTTPS" /></Field>
           </div>
         )}
-        {f.pathPrefix && <div className="alert info">La app recibe las direcciones sin la ruta (<code>/holaema/clientes</code> → <code>/clientes</code>) y la ruta original en el encabezado <code>X-Forwarded-Prefix</code>. Si arma enlaces o pide archivos con "/" al principio, hay que configurarle su ruta base (ver el instructivo).</div>}
       </div>
       <div className="card stack"><h3>Volúmenes</h3><VolumesEditor rows={volumes} onChange={setVolumes} readOnly={ro} /></div>
       {!ro && (

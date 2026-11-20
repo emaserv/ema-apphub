@@ -302,7 +302,7 @@ export default function NewApplication() {
         <div className="stack" style={{ gap: 16 }}>
           <div className="card stack">
             <h3>Ambiente inicial y red</h3>
-            <div className="grid c4">
+            <div className={`grid ${SHOW_DOMAIN ? 'c4' : 'c3'}`}>
               <Field label="Ambiente">
                 <select className="input" value={envName} onChange={(e) => setEnvName(e.target.value)}>{Object.entries(ENV_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select>
               </Field>
@@ -313,11 +313,10 @@ export default function NewApplication() {
                 <Field label="Dominio" hint="Opcional. Requiere DNS apuntando al servidor"><input className="input mono" value={domain} onChange={(e) => setDomain(e.target.value.trim().toLowerCase())} placeholder="crm.emaservicios.com.ar" /></Field>
                 <Field label="HTTPS"><Switch checked={https} onChange={setHttps} label="Let's Encrypt + redirección" /></Field>
               </>}
-              <Field label="Ruta *" hint={pathMissing ? <span style={{ color: 'var(--err)' }}>Obligatoria (ej. /holaema)</span> : `Se abrirá en …/${pathPrefix.replace(/^\/+|\/+$/g, '')}/`}>
+              <Field label="Ruta *" hint={pathMissing ? <span style={{ color: 'var(--err)' }}>Obligatoria (ej. /holaema)</span> : 'La app debe funcionar dentro de esta ruta (ver instructivo)'}>
                 <input className="input mono" value={pathPrefix} onChange={(e) => { setPathTouched(true); setPathPrefix(e.target.value.trim().toLowerCase()); }} placeholder={`/${slug || 'mi-app'}`} />
               </Field>
             </div>
-            {pathPrefix && <div className="alert info">La app tiene que estar preparada para funcionar dentro de una ruta: recibe las direcciones sin la ruta y la ruta original en el encabezado <code>X-Forwarded-Prefix</code>. Si arma enlaces o pide archivos con "/" al principio, configure su ruta base (ver el instructivo).</div>}
           </div>
           <div className="card stack"><h3>Variables de entorno</h3><VarsEditor rows={vars} onChange={setVars} /></div>
           <div className="card stack"><h3>Volúmenes persistentes</h3><VolumesEditor rows={volumes} onChange={setVolumes} /></div>
