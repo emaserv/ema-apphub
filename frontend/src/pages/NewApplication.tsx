@@ -2,6 +2,7 @@ import { DragEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { AlertTriangle, ArrowLeft, ArrowRight, Check, FileArchive, FolderUp, GitBranch, PackagePlus, RefreshCw, Rocket, Wand2 } from 'lucide-react';
 import { api, ENV_LABEL, fmtBytes, SHOW_DOMAIN, uploadForm } from '../api/client';
+import DownloadPromptButton from '../components/DownloadPromptButton';
 import { useAuth } from '../auth';
 import CodeEditor from '../components/CodeEditor';
 import DeploymentLog from '../components/DeploymentLog';
@@ -176,7 +177,10 @@ export default function NewApplication() {
     <>
       <div className="page-head">
         <div><span className="eyebrow">Repositorio</span><h1>Nueva aplicación</h1><p>Suba el código, revise la configuración Docker propuesta y despliegue.</p></div>
-        <button className="btn outline" onClick={() => nav('/aplicaciones')}><ArrowLeft size={15} />Volver</button>
+        <div className="row">
+          <DownloadPromptButton appName={name || undefined} route={pathPrefix || null} />
+          <button className="btn outline" onClick={() => nav('/aplicaciones')}><ArrowLeft size={15} />Volver</button>
+        </div>
       </div>
       <div className="steps">{STEPS.map((s, i) => <div key={s} className={`s ${i === step ? 'active' : i < step ? 'done' : ''}`}><span className="n">{i < step ? <Check size={14} /> : i + 1}</span>{s}</div>)}</div>
 

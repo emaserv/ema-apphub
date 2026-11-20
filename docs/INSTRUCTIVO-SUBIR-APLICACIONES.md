@@ -8,6 +8,11 @@ Este instructivo explica, paso a paso, cómo preparar una aplicación, subirla a
 
 Cualquier tecnología funciona si puede ejecutarse dentro de Docker. Para que el deploy sea exitoso al primer intento, verifique:
 
+> **Descargar prompt:** en *Aplicaciones*, en *Nueva aplicación* y en *Puertos y dominio* de cada app hay un botón **Descargar prompt**.
+> Baja un archivo `.md` con instrucciones para un asistente de IA (Claude, Copilot, ChatGPT…): se lo da junto con el proyecto
+> y el asistente lo adapta a AppHub (puerto, health check, variables, base de datos, ruta) y devuelve los datos a cargar.
+> Desde una app ya creada, el prompt incluye su ruta de publicación.
+
 | # | Requisito | Por qué |
 |---|---|---|
 | 1 | La app **escucha en `0.0.0.0`** (no en `localhost`/`127.0.0.1`) | Dentro del contenedor, `localhost` no es accesible desde afuera |

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Plus, RotateCw, Save, Trash2 } from 'lucide-react';
 import { api, ENV_LABEL, SHOW_DOMAIN } from '../../api/client';
 import { useAuth } from '../../auth';
+import DownloadPromptButton from '../../components/DownloadPromptButton';
 import { VolumeRow, VolumesEditor } from '../../components/Editors';
 import { Confirm, Field, Switch, useAction } from '../../components/ui';
 import { TabProps } from './OverviewTab';
@@ -71,7 +72,7 @@ export default function EnvironmentTab({ app, env, reload }: TabProps) {
         {!ro && <div><button className="btn sm outline" onClick={() => setExtra([...extra, { internal: 0, external: 0 }])}><Plus size={14} />Agregar puerto</button></div>}
       </div>
       <div className="card stack">
-        <h3>Publicación</h3>
+        <div className="row"><h3>Publicación</h3><span className="right"><DownloadPromptButton small appName={app.name} route={env.path_prefix} /></span></div>
         <div className="grid c3">
           <Field label="Ruta *" hint={pathMissing ? <span style={{ color: 'var(--err)' }}>Obligatoria (ej. /{app.slug})</span> : 'Única por ambiente. La app debe funcionar dentro de esta ruta (ver instructivo)'}>
             <input className="input mono" disabled={ro} value={f.pathPrefix ?? ''} onChange={(e) => setF({ ...f, pathPrefix: e.target.value.trim().toLowerCase() })} placeholder={`/${app.slug}`} />
