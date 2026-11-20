@@ -195,6 +195,10 @@ r.put('/applications/:id/environments/:name', requirePerm('apps.edit'), ah(async
   }
   const pathPrefix = b.pathPrefix === undefined ? undefined : normalizeAppPath(b.pathPrefix);
   if (pathPrefix) await assertPathFree(pathPrefix, env.id);
+  // La ruta es obligatoria salvo que el ambiente tenga dominio propio
+  const finalDomain = b.domain === undefined ? env.domain : b.domain || null;
+  const finalPath = pathPrefix === undefined ? env.path_prefix : pathPrefix;
+  if (!finalPath && !finalDomain) throw badRequest('La ruta es obligatoria (ej. /holaema)');
   if (b.isDefault) await q(`UPDATE application_environments SET is_default=false WHERE application_id=$1`, [app.id]);
   const map: Record<string, unknown> = {
     external_port: b.externalPort, internal_port: b.internalPort, domain: b.domain === undefined ? undefined : b.domain?.toLowerCase() || null,

@@ -106,16 +106,36 @@ describe('publicación por ruta (ej. /holaema)', () => {
     assert.equal(reservada.status, 400, JSON.stringify(reservada.body));
   });
 
-  test('se puede cambiar y quitar desde el ambiente', async () => {
-    const id = (await api('POST', '/applications', { session: s, body: newApp('Ruta Editable', { environment: { name: 'production', externalPort: null } }) })).body.application.id;
+  test('es obligatoria: si no se indica, se propone /<app> (y /<app>-<ambiente> para otro ambiente)', async () => {
+    const r = await api('POST', '/applications', { session: s, body: newApp('Ruta Editable', { environment: { name: 'production', externalPort: null } }) });
+    assert.equal(r.status, 201, JSON.stringify(r.body));
+    const id = r.body.application.id;
     ids.push(id);
+    assert.equal(r.body.environment.path_prefix, '/ruta-editable');
+    const staging = await api('POST', `/applications/${id}/environments`, { session: s, body: { name: 'staging', externalPort: null } });
+    assert.equal(staging.status, 201, JSON.stringify(staging.body));
+    assert.equal(staging.body.path_prefix, '/ruta-editable-staging');
+  });
+
+  test('una app con nombre de pantalla de AppHub recibe otra ruta', async () => {
+    const r = await api('POST', '/applications', { session: s, body: newApp('Docker', { environment: { name: 'production', externalPort: null } }) });
+    assert.equal(r.status, 201, JSON.stringify(r.body));
+    ids.push(r.body.application.id);
+    assert.equal(r.body.environment.path_prefix, '/docker-production');
+  });
+
+  test('se puede cambiar desde el ambiente, pero no dejar vacía', async () => {
+    const id = ids[1];
     assert.equal((await api('PUT', `/applications/${id}/environments/production`, { session: s, body: { pathPrefix: '/holaruta' } })).status, 409, 'ocupada');
     assert.equal((await api('PUT', `/applications/${id}/environments/production`, { session: s, body: { pathPrefix: 'a/b' } })).status, 400, 'inválida');
     const ok = await api('PUT', `/applications/${id}/environments/production`, { session: s, body: { pathPrefix: '/editable' } });
     assert.equal(ok.status, 200, JSON.stringify(ok.body));
     assert.equal(ok.body.path_prefix, '/editable');
-    const sin = await api('PUT', `/applications/${id}/environments/production`, { session: s, body: { pathPrefix: null } });
-    assert.equal(sin.body.path_prefix, null);
+    const vacia = await api('PUT', `/applications/${id}/environments/production`, { session: s, body: { pathPrefix: null } });
+    assert.equal(vacia.status, 400, JSON.stringify(vacia.body));
+    assert.match(vacia.body.error, /obligatoria/);
+    const conDominio = await api('PUT', `/applications/${id}/environments/production`, { session: s, body: { pathPrefix: null, domain: 'editable.ema.com.ar' } });
+    assert.equal(conDominio.status, 200, 'con dominio propio la ruta puede quedar vacía');
   });
 });
 

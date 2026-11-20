@@ -6,7 +6,7 @@ import { decrypt, encrypt } from '../lib/crypto';
 import { badRequest, conflict, notFound } from '../lib/http';
 import { bumpPatch, dirSize, rmrf, safeJoin, slugify, VERSION_RE } from '../lib/util';
 import { normalizeAppPath } from '../lib/appPath';
-import { AppRow, EnvRow, assertPathFree, assertPortFree, envSnapshot, getApp, nextFreePort, runtimeEnv, upsertVar } from './core';
+import { AppRow, EnvRow, assertPathFree, assertPortFree, defaultAppPath, envSnapshot, getApp, nextFreePort, runtimeEnv, upsertVar } from './core';
 import { createDatabase } from './database';
 import { BuildConfig, detect, Detection, existingDockerfile, exposedPort } from './detector';
 import { enqueueDeploy } from './deploy';
@@ -137,8 +137,10 @@ export async function createEnvironment(app: AppRow, e: EnvInput, isDefault: boo
   const port = e.externalPort === undefined ? await nextFreePort() : e.externalPort;
   if (port) await assertPortFree(port, null, undefined, revealOwner);
   for (const v of e.volumes ?? []) validateVolume(v);
-  const pathPrefix = normalizeAppPath(e.pathPrefix);
+  // La ruta es obligatoria (salvo que el ambiente tenga dominio propio): si no se indicó, se propone una
+  let pathPrefix = normalizeAppPath(e.pathPrefix);
   if (pathPrefix) await assertPathFree(pathPrefix, null);
+  else if (!e.domain?.trim()) pathPrefix = await defaultAppPath(app.slug, e.name);
   const env = await one<EnvRow>(
     `INSERT INTO application_environments (application_id, name, is_default, internal_port, external_port, domain, https_enabled, path_prefix, volumes, memory_limit_mb, cpu_limit)
      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
