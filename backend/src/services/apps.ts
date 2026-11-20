@@ -5,7 +5,8 @@ import { one, q } from '../db/pool';
 import { decrypt, encrypt } from '../lib/crypto';
 import { badRequest, conflict, notFound } from '../lib/http';
 import { bumpPatch, dirSize, rmrf, safeJoin, slugify, VERSION_RE } from '../lib/util';
-import { AppRow, EnvRow, assertPortFree, envSnapshot, getApp, nextFreePort, runtimeEnv, upsertVar } from './core';
+import { normalizeAppPath } from '../lib/appPath';
+import { AppRow, EnvRow, assertPathFree, assertPortFree, envSnapshot, getApp, nextFreePort, runtimeEnv, upsertVar } from './core';
 import { createDatabase } from './database';
 import { BuildConfig, detect, Detection, existingDockerfile, exposedPort } from './detector';
 import { enqueueDeploy } from './deploy';
@@ -116,6 +117,8 @@ export interface EnvInput {
   internalPort?: number | null;
   domain?: string | null;
   httpsEnabled?: boolean;
+  /** Ruta de publicación ("holaema" o "/holaema"); se normaliza y se valida acá. */
+  pathPrefix?: string | null;
   volumes?: { source: string; target: string; type: 'volume' | 'bind'; readOnly?: boolean }[];
   variables?: { key: string; value: string; isSecret?: boolean }[];
   /** Sin indicar → DEFAULT_MEMORY_LIMIT_MB; null → sin límite. */
@@ -134,10 +137,12 @@ export async function createEnvironment(app: AppRow, e: EnvInput, isDefault: boo
   const port = e.externalPort === undefined ? await nextFreePort() : e.externalPort;
   if (port) await assertPortFree(port, null, undefined, revealOwner);
   for (const v of e.volumes ?? []) validateVolume(v);
+  const pathPrefix = normalizeAppPath(e.pathPrefix);
+  if (pathPrefix) await assertPathFree(pathPrefix, null);
   const env = await one<EnvRow>(
-    `INSERT INTO application_environments (application_id, name, is_default, internal_port, external_port, domain, https_enabled, volumes, memory_limit_mb, cpu_limit)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
-    [app.id, e.name, isDefault, e.internalPort ?? null, port ?? null, e.domain?.trim().toLowerCase() || null, e.httpsEnabled ?? true,
+    `INSERT INTO application_environments (application_id, name, is_default, internal_port, external_port, domain, https_enabled, path_prefix, volumes, memory_limit_mb, cpu_limit)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
+    [app.id, e.name, isDefault, e.internalPort ?? null, port ?? null, e.domain?.trim().toLowerCase() || null, e.httpsEnabled ?? true, pathPrefix,
      JSON.stringify(e.volumes ?? []), initialMemoryLimit(e.memoryLimitMb), e.cpuLimit ?? null],
   );
   for (const v of e.variables ?? []) await upsertVar(env!.id, v.key, v.value, !!v.isSecret);

@@ -86,6 +86,39 @@ describe('ciclo de vida de una aplicación (sin deploy)', () => {
   });
 });
 
+describe('publicación por ruta (ej. /holaema)', () => {
+  const ids: string[] = [];
+  after(async () => { for (const id of ids) await api('DELETE', `/applications/${id}?purge=1`, { session: s }); });
+
+  test('al crear se normaliza la ruta y la dirección de la app la usa', async () => {
+    const r = await api('POST', '/applications', { session: s, body: newApp('Hola Ruta', { environment: { name: 'production', externalPort: null, pathPrefix: 'HolaRuta/' } }) });
+    assert.equal(r.status, 201, JSON.stringify(r.body));
+    ids.push(r.body.application.id);
+    assert.equal(r.body.environment.path_prefix, '/holaruta');
+    const det = await api('GET', `/applications/${r.body.application.id}`, { session: s });
+    assert.match(det.body.environments[0].url, /\/holaruta\/$/);
+  });
+
+  test('no se puede repetir la ruta de otra app ni usar una de AppHub', async () => {
+    const otra = await api('POST', '/applications', { session: s, body: newApp('Otra Ruta', { environment: { name: 'production', externalPort: null, pathPrefix: '/holaruta' } }) });
+    assert.equal(otra.status, 409, JSON.stringify(otra.body));
+    const reservada = await api('POST', '/applications', { session: s, body: newApp('Ruta Reservada', { environment: { name: 'production', externalPort: null, pathPrefix: '/api' } }) });
+    assert.equal(reservada.status, 400, JSON.stringify(reservada.body));
+  });
+
+  test('se puede cambiar y quitar desde el ambiente', async () => {
+    const id = (await api('POST', '/applications', { session: s, body: newApp('Ruta Editable', { environment: { name: 'production', externalPort: null } }) })).body.application.id;
+    ids.push(id);
+    assert.equal((await api('PUT', `/applications/${id}/environments/production`, { session: s, body: { pathPrefix: '/holaruta' } })).status, 409, 'ocupada');
+    assert.equal((await api('PUT', `/applications/${id}/environments/production`, { session: s, body: { pathPrefix: 'a/b' } })).status, 400, 'inválida');
+    const ok = await api('PUT', `/applications/${id}/environments/production`, { session: s, body: { pathPrefix: '/editable' } });
+    assert.equal(ok.status, 200, JSON.stringify(ok.body));
+    assert.equal(ok.body.path_prefix, '/editable');
+    const sin = await api('PUT', `/applications/${id}/environments/production`, { session: s, body: { pathPrefix: null } });
+    assert.equal(sin.body.path_prefix, null);
+  });
+});
+
 describe('variables secretas', () => {
   let id = '';
   before(async () => {

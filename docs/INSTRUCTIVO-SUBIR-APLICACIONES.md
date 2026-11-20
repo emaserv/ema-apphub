@@ -116,6 +116,7 @@ Si cambia la tecnología, use **Regenerar Dockerfile**.
 1. **Ambiente**: normalmente *Producción* para la primera publicación (o *Desarrollo* para pruebas).
 2. **Puerto externo**: se sugiere uno libre (rango 8100–8999). La app quedará en `http://IP-DEL-SERVIDOR:PUERTO`. Al salir del campo se verifica que no esté en uso. Puede dejarlo vacío si sólo se accederá por dominio.
 3. **Dominio** (opcional): ej. `crm.emaservicios.com.ar`. Antes, pida a Sistemas que cree el registro DNS apuntando al servidor. Con **HTTPS** activo se emite el certificado Let's Encrypt y se redirige HTTP→HTTPS.
+   **Ruta** (opcional): publica la app dentro del dominio de AppHub, ej. `/crm` → `https://apphub.emaservicios.com.ar/crm/`. No requiere DNS. Ver [Apps publicadas por ruta](#apps-publicadas-por-ruta).
 4. **Variables de entorno**:
    * *Agregar variable* o *Pegar / importar .env* (pegue el contenido de su `.env`).
    * Marque como **Secreta** toda contraseña, token o clave (se detectan automáticamente las que contienen PASSWORD, SECRET, TOKEN o KEY).
@@ -183,6 +184,32 @@ Código → Validación → Build → Tests → Imagen → Deploy → Health che
 * Puede **copiar variables** desde otro ambiente; se asigna un puerto libre.
 * Cada ambiente tiene contenedor, variables, base de datos, puerto y dominio **propios**.
 * Flujo recomendado: subir versión → *Deploy* en **Staging** → probar → seleccionar **Producción** → pestaña **Versiones** → *Deploy a Producción* sobre la misma versión (no se recompila: se reutiliza la imagen).
+
+### Apps publicadas por ruta
+
+En **Puertos y dominio → Ruta** se puede publicar un ambiente en una ruta del dominio de AppHub, por ejemplo `/crm` → `https://apphub.emaservicios.com.ar/crm/`. No hace falta pedir DNS. Cada ruta se usa en **un solo ambiente** (para publicar Producción y Staging, use por ejemplo `/crm` y `/crm-staging`). No se pueden usar las rutas de la propia AppHub (`/api`, `/aplicaciones`, `/login`, etc.).
+
+**Qué recibe la app.** AppHub le quita la ruta a cada pedido: `/crm/clientes` llega como `/clientes`, y la ruta original va en el encabezado `X-Forwarded-Prefix: /crm`. Si se entra a `/crm` sin la barra final, se redirige a `/crm/`.
+
+**La app tiene que estar preparada.** Todo enlace, archivo o llamada a la API que empiece con `/` (por ejemplo `/assets/app.js` o `/api/login`) va a la raíz del dominio, no a `/crm/`, y falla. Use direcciones **relativas** o configure la **ruta base**:
+
+| Tecnología | Cómo configurar la ruta base `/crm/` |
+|---|---|
+| HTML estático | Direcciones relativas (`estilos.css`, no `/estilos.css`) o `<base href="/crm/">` en el `<head>` |
+| React + Vite | `base: '/crm/'` en `vite.config` y `basename="/crm"` en el router |
+| Create React App | `"homepage": "/crm"` en `package.json` y `basename` en el router |
+| Angular | `ng build --base-href /crm/` |
+| Vue (Vite) | `base: '/crm/'` y `createWebHistory('/crm/')` |
+| Next.js | `basePath: '/crm'` **no es compatible** (espera recibir la ruta): pida que se publique por dominio |
+| ASP.NET Core | `app.UsePathBase("/crm")` o leer `X-Forwarded-Prefix` con *Forwarded Headers* |
+| Express | Rutas relativas en las vistas, o armar los enlaces con `req.headers['x-forwarded-prefix']` |
+| Django | `FORCE_SCRIPT_NAME = '/crm'` |
+| Laravel | `APP_URL=https://apphub.emaservicios.com.ar/crm` |
+
+> **Seguridad:** las apps publicadas por ruta comparten el dominio con AppHub, y el navegador las trata como el mismo sitio.
+> Una app con código malicioso o una vulnerabilidad podría usar la sesión de quien la abra para operar AppHub en su nombre.
+> Úselo sólo con apps de confianza y por un período acotado. Lo recomendado es un dominio exclusivo para las apps
+> (ej. `apps.emaservicios.com.ar`, configurando el dominio y la ruta en el ambiente) o un subdominio por app.
 
 ---
 

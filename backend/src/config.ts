@@ -36,6 +36,9 @@ export const config = {
   traefikCertResolver: process.env.TRAEFIK_CERT_RESOLVER || 'letsencrypt',
   portRangeStart: int(process.env.PORT_RANGE_START, 8100),
   portRangeEnd: int(process.env.PORT_RANGE_END, 8999),
+  /** Dirección base de las apps publicadas por ruta (https://apphub.emaservicios.com.ar → …/holaema/). */
+  appsPathBaseUrl: (process.env.APPS_PATH_BASE_URL
+    || `http://${process.env.PUBLIC_HOST || 'localhost'}:${process.env.PLATFORM_HTTP_PORT || 8080}`).replace(/\/+$/, ''),
 
   healthIntervalSec: int(process.env.HEALTH_INTERVAL_SEC, 60),
   healthTimeoutMs: int(process.env.HEALTH_TIMEOUT_MS, 5000),

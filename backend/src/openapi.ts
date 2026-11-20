@@ -15,6 +15,7 @@ const S = {
       technology: { type: 'string', example: 'react' }, internalPort: { type: 'integer', example: 80 }, healthcheckPath: { type: 'string', example: '/api/health' },
       stagingId: { type: 'string', description: 'Devuelto por /applications/analyze' }, dockerfile: { type: 'string' }, version: { type: 'string', example: '1.0.0' },
       environment: { type: 'object', properties: { name: { type: 'string', example: 'production' }, externalPort: { type: 'integer', example: 8085 }, domain: { type: 'string', example: 'crm.empresa.com' },
+        pathPrefix: { type: 'string', example: '/crm', description: 'Publicar la app en una ruta del dominio de AppHub (ej. https://apphub.empresa.com/crm/)' },
         variables: { type: 'array', items: { type: 'object', properties: { key: { type: 'string' }, value: { type: 'string' }, isSecret: { type: 'boolean' } } } } } },
       createDatabase: { type: 'boolean' }, deploy: { type: 'boolean' },
       repository: { type: 'object', properties: { url: { type: 'string' }, authType: { type: 'string', enum: ['none', 'token', 'basic', 'ssh'] }, credential: { type: 'string' }, branch: { type: 'string' }, tag: { type: 'string' }, commit: { type: 'string' } } },

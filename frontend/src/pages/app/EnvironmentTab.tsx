@@ -19,7 +19,7 @@ export default function EnvironmentTab({ app, env, reload }: TabProps) {
 
   useEffect(() => {
     setF({ externalPort: env.external_port ?? '', internalPort: env.internal_port ?? '', domain: env.domain ?? '', httpsEnabled: env.https_enabled,
-      memoryLimitMb: env.memory_limit_mb ?? '', cpuLimit: env.cpu_limit ?? '', isDefault: env.is_default });
+      pathPrefix: env.path_prefix ?? '', memoryLimitMb: env.memory_limit_mb ?? '', cpuLimit: env.cpu_limit ?? '', isDefault: env.is_default });
     setVolumes(env.volumes ?? []); setExtra(env.extra_ports ?? []); setRestart(false);
   }, [env]);
 
@@ -33,7 +33,7 @@ export default function EnvironmentTab({ app, env, reload }: TabProps) {
     const num = (v: any) => (v === '' || v === null ? null : Number(v));
     const r = await api(`/applications/${app.id}/environments/${env.name}`, { method: 'PUT', body: {
       externalPort: num(f.externalPort), internalPort: num(f.internalPort), domain: f.domain || null, httpsEnabled: f.httpsEnabled,
-      memoryLimitMb: num(f.memoryLimitMb), cpuLimit: num(f.cpuLimit), isDefault: f.isDefault || undefined,
+      pathPrefix: f.pathPrefix || null, memoryLimitMb: num(f.memoryLimitMb), cpuLimit: num(f.cpuLimit), isDefault: f.isDefault || undefined,
       volumes: volumes.filter((v) => v.source && v.target), extraPorts: extra.filter((p) => p.internal && p.external),
     } });
     setRestart(r.restartRequired); reload();
@@ -74,6 +74,13 @@ export default function EnvironmentTab({ app, env, reload }: TabProps) {
           <Field label="HTTPS"><Switch checked={!!f.httpsEnabled} disabled={ro} onChange={(v) => setF({ ...f, httpsEnabled: v })} label="Certificado Let's Encrypt + redirección HTTP→HTTPS" /></Field>
           <Field label="Ambiente principal"><Switch checked={!!f.isDefault} disabled={ro || env.is_default} onChange={(v) => setF({ ...f, isDefault: v })} label="Usar como ambiente por defecto" /></Field>
         </div>
+        <div className="grid c3">
+          <Field label="Ruta" hint="Publica la app en una ruta del dominio de AppHub (ej. /holaema → …/holaema/). Debe ser única entre todos los ambientes.">
+            <input className="input mono" disabled={ro} value={f.pathPrefix ?? ''} onChange={(e) => setF({ ...f, pathPrefix: e.target.value.trim().toLowerCase() })} placeholder={`/${app.slug}`} />
+          </Field>
+          {env.path_prefix && env.url && <Field label="Dirección"><a className="mono" href={env.url} target="_blank" rel="noreferrer">{env.url}</a></Field>}
+        </div>
+        {f.pathPrefix && <div className="alert info">La app recibe las direcciones sin la ruta (<code>/holaema/clientes</code> → <code>/clientes</code>) y la ruta original en el encabezado <code>X-Forwarded-Prefix</code>. Si arma enlaces o pide archivos con "/" al principio, hay que configurarle su ruta base (ver el instructivo).</div>}
       </div>
       <div className="card stack"><h3>Volúmenes</h3><VolumesEditor rows={volumes} onChange={setVolumes} readOnly={ro} /></div>
       {!ro && (

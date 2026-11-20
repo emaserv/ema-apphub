@@ -14,6 +14,8 @@ export interface ComposeInput {
   extraPorts?: PortSpec[];
   domain?: string | null;
   httpsEnabled?: boolean;
+  /** Publicación por ruta ("/holaema"): ya normalizada (ver lib/appPath). */
+  pathPrefix?: string | null;
   volumes?: VolumeSpec[];
   memoryLimitMb?: number | null;
   cpuLimit?: number | null;
@@ -31,7 +33,7 @@ export function generateCompose(i: ComposeInput): string {
     'ema.env': i.env,
     'ema.service': 'app',
   };
-  if (config.traefikEnabled && i.domain) {
+  if (config.traefikEnabled && (i.domain || i.pathPrefix)) {
     Object.assign(labels, {
       'traefik.enable': 'true',
       'traefik.docker.network': config.appsNetwork,
@@ -39,7 +41,18 @@ export function generateCompose(i: ComposeInput): string {
       [`traefik.http.routers.${router}.rule`]: `Host(\`${i.domain}\`)`,
       [`traefik.http.routers.${router}.service`]: router,
     });
-    if (i.httpsEnabled !== false) {
+    if (i.pathPrefix) {
+      // Por ruta: "/holaema" y todo lo que esté debajo; la app recibe la dirección sin la ruta ("/holaema/x" → "/x")
+      // y la ruta original en X-Forwarded-Prefix. Va por http: el HTTPS lo pone el proxy que está adelante
+      // (nginx de AppHub o el de la empresa).
+      const pathRule = `(Path(\`${i.pathPrefix}\`) || PathPrefix(\`${i.pathPrefix}/\`))`;
+      Object.assign(labels, {
+        [`traefik.http.routers.${router}.rule`]: i.domain ? `Host(\`${i.domain}\`) && ${pathRule}` : pathRule,
+        [`traefik.http.routers.${router}.entrypoints`]: 'web',
+        [`traefik.http.routers.${router}.middlewares`]: `${router}-strip`,
+        [`traefik.http.middlewares.${router}-strip.stripprefix.prefixes`]: i.pathPrefix,
+      });
+    } else if (i.httpsEnabled !== false) {
       Object.assign(labels, {
         [`traefik.http.routers.${router}.entrypoints`]: 'websecure',
         [`traefik.http.routers.${router}.tls`]: 'true',

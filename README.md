@@ -125,6 +125,8 @@ El frontend usa `frontend/public/logo-ema.png` (logo principal de www.emaservici
 | `APPS_NETWORK` | Red Docker compartida con Traefik | `ema_apps` |
 | `PUBLIC_HOST` | IP/host para armar URLs `http://host:puerto` | `localhost` |
 | `APPS_BASE_DOMAIN` | Dominio base sugerido | — |
+| `APPS_PATH_BASE_URL` | Dirección base de las apps publicadas por **ruta** (ej. `https://apphub.emaservicios.com.ar` → `…/holaema/`) | `http://PUBLIC_HOST:PLATFORM_HTTP_PORT` |
+| `TRAEFIK_TRUSTED_IPS` | Redes cuyos encabezados `X-Forwarded-*` acepta Traefik (proxies internos) | redes privadas |
 | `PORT_RANGE_START/END` | Rango de puertos externos auto-asignados | `8100–8999` |
 | `MAX_UPLOAD_MB` | Tamaño máximo de ZIP | `500` |
 | `BUILD_TIMEOUT_MIN` | Tiempo máximo de build | `30` |

@@ -16,7 +16,7 @@ export interface AppRow {
 }
 export interface EnvRow {
   id: string; application_id: string; name: string; is_default: boolean; internal_port: number | null; external_port: number | null;
-  domain: string | null; https_enabled: boolean; volumes: VolumeSpec[]; extra_ports: PortSpec[]; replicas: number;
+  domain: string | null; https_enabled: boolean; path_prefix: string | null; volumes: VolumeSpec[]; extra_ports: PortSpec[]; replicas: number;
   memory_limit_mb: number | null; cpu_limit: string | null; deployed_version_id: string | null; status: string;
   health_status: string; health_checked_at: string | null;
 }
@@ -115,6 +115,13 @@ export async function assertPortFree(port: number, envId?: string | null, ownCon
   if (by && by !== ownContainer) throw conflict(revealOwner ? `El puerto ${port} está en uso por el contenedor ${by}` : `El puerto ${port} ya está en uso en el servidor`);
 }
 
+/** Verifica que la ruta de publicación (ya normalizada) no la use otro ambiente. */
+export async function assertPathFree(pathPrefix: string, envId: string | null) {
+  const other = await one(`SELECT 1 FROM application_environments WHERE lower(path_prefix)=lower($1) AND ($2::uuid IS NULL OR id <> $2)`,
+    [pathPrefix, envId]);
+  if (other) throw conflict(`La ruta ${pathPrefix} ya está asignada a otra aplicación`);
+}
+
 export async function nextFreePort(): Promise<number> {
   const taken = new Set((await q(`SELECT external_port FROM application_environments WHERE external_port IS NOT NULL`)).map((r) => r.external_port));
   const used = await hostPortsInUse();
@@ -137,6 +144,7 @@ export async function writeEnvFiles(app: AppRow, env: EnvRow, image: string): Pr
     slug: app.slug, env: env.name, image,
     internalPort: env.internal_port || app.internal_port,
     externalPort: env.external_port, extraPorts: env.extra_ports, domain: env.domain, httpsEnabled: env.https_enabled,
+    pathPrefix: env.path_prefix,
     volumes: (env.volumes || []).map((v) => {
       if (v.type !== 'bind') return v;
       // Los bind mounts quedan confinados a DATA_DIR/applications/<slug>/data/<ruta>
@@ -178,7 +186,11 @@ export async function currentImageFor(app: AppRow, env: EnvRow): Promise<string 
   return v ? imageTag(app.slug, v.version) : null;
 }
 
-export function appUrl(env: EnvRow): string | null {
+export function appUrl(env: Pick<EnvRow, 'domain' | 'https_enabled' | 'path_prefix' | 'external_port'>): string | null {
+  if (env.path_prefix) {
+    const base = env.domain ? `${env.https_enabled ? 'https' : 'http'}://${env.domain}` : config.appsPathBaseUrl;
+    return `${base}${env.path_prefix}/`;
+  }
   if (env.domain) return `${env.https_enabled ? 'https' : 'http'}://${env.domain}`;
   if (env.external_port) return `http://${config.publicHost}:${env.external_port}`;
   return null;

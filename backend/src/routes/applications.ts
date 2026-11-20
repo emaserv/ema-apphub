@@ -185,6 +185,7 @@ const CREATE = z.object({
     internalPort: PORT.nullable().optional(),
     domain: z.string().max(255).regex(/^[a-z0-9.-]*$/i).nullable().optional(),
     httpsEnabled: z.boolean().optional(),
+    pathPrefix: z.string().max(70).nullable().optional(),
     volumes: z.array(VOLUME).max(20).optional(),
     variables: z.array(VAR).max(300).optional(),
     memoryLimitMb: z.number().int().positive().nullable().optional(),
