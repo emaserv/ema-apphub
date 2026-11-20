@@ -28,6 +28,12 @@ const CASOS: Caso[] = [
   { nombre: 'ver auditoría', method: 'GET', path: () => '/audit', permitido: ['superadmin', 'admin'], ok: 200 },
   { nombre: 'agregar registry Docker', method: 'POST', path: () => '/system/registries', body: {}, permitido: ['superadmin', 'admin'], ok: 400 },
   { nombre: 'administrar bases de datos', method: 'DELETE', path: () => '/applications/00000000-0000-0000-0000-000000000000/database', permitido: ['superadmin', 'admin'], ok: 404 },
+  // Panel de datos: ver = db.view (la app de prueba no tiene base: quien puede ver recibe 404); modificar = db.data.edit
+  { nombre: 'ver tablas de la base', method: 'GET', path: (id) => `/applications/${id}/database/tables`, permitido: ['superadmin', 'admin', 'developer'], ok: 404 },
+  { nombre: 'ver registros de una tabla', method: 'GET', path: (id) => `/applications/${id}/database/rows?schema=public&table=x`, permitido: ['superadmin', 'admin', 'developer'], ok: 404 },
+  { nombre: 'agregar registros', method: 'POST', path: (id) => `/applications/${id}/database/rows`, body: {}, permitido: ['superadmin', 'admin'], ok: 400 },
+  { nombre: 'editar registros', method: 'PUT', path: (id) => `/applications/${id}/database/rows`, body: {}, permitido: ['superadmin', 'admin'], ok: 400 },
+  { nombre: 'eliminar registros', method: 'POST', path: (id) => `/applications/${id}/database/rows/delete`, body: {}, permitido: ['superadmin', 'admin'], ok: 400 },
   { nombre: 'crear backup', method: 'POST', path: () => '/applications/00000000-0000-0000-0000-000000000000/backup', body: {}, permitido: ['superadmin', 'admin'], ok: 404 },
 ];
 

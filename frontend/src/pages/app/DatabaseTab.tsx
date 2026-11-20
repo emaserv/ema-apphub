@@ -3,6 +3,7 @@ import { Copy, Database, KeyRound, Plus, RotateCw, Trash2, Archive } from 'lucid
 import { api, ENV_LABEL, fmtBytes, fmtDate } from '../../api/client';
 import { useAuth } from '../../auth';
 import { Confirm, Empty, Field, Modal, Spinner, StatusBadge, useAction, useData, useToast } from '../../components/ui';
+import DataPanel from './DataPanel';
 import { TabProps } from './OverviewTab';
 
 export default function DatabaseTab({ app, env, reload }: TabProps) {
@@ -68,6 +69,7 @@ export default function DatabaseTab({ app, env, reload }: TabProps) {
           <p className="muted small">Logs: pestaña <b>Logs → PostgreSQL</b>. Restaurar: pestaña <b>Backups</b>.</p>
         </div>
       </div>
+      {db.container?.running && <DataPanel app={app} env={env} reload={reload} />}
       <div className="card stack">
         <div className="card-title"><h3>Usuarios y credenciales</h3>{manage && <button className="btn sm primary" onClick={() => setAddUser(true)}><Plus size={14} />Nuevo usuario</button>}</div>
         <table className="table">

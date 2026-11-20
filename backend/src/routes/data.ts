@@ -11,6 +11,7 @@ import { audit } from '../services/audit';
 import { backupApp, backupDatabase, deleteBackup, restoreBackup } from '../services/backup';
 import { getApp } from '../services/core';
 import * as dbs from '../services/database';
+import * as data from '../services/dbData';
 import { listRefs } from '../services/git';
 import { saveRepository } from '../services/apps';
 import { reloadBackupSchedules } from '../services/monitor';
@@ -77,6 +78,59 @@ r.post('/applications/:id/database/users/:uid/password', requirePerm('db.manage'
   await dbs.rotatePassword(app, env, req.params.uid, b.password || undefined);
   await audit(req, { action: 'db_password_rotate', entityType: 'database', app, details: { environment: env.name, credentialId: req.params.uid } });
   res.json({ ok: true, message: 'Contraseña actualizada. Por seguridad no se muestra; se inyectó en las variables del ambiente si corresponde.' });
+}));
+
+// ───────── datos de la base: tablas y registros ─────────
+// Ver: db.view (Superadmin, Admin, Desarrollador). Agregar, editar y eliminar: db.data.edit (Superadmin, Admin).
+
+const TABLE_REF = { schema: z.string().min(1).max(63), table: z.string().min(1).max(63) };
+const VALUES = z.record(z.string().max(63), z.string().max(1_000_000).nullable());
+const PK = z.record(z.string().max(63), z.string().max(10_000));
+
+r.get('/applications/:id/database/tables', requirePerm('db.view'), ah(async (req, res) => {
+  const { env } = await ctx(req);
+  res.json(await data.listTables(await data.execFor(env.id)));
+}));
+
+r.get('/applications/:id/database/rows', requirePerm('db.view'), ah(async (req, res) => {
+  const { env } = await ctx(req);
+  const b = parse(z.object({ ...TABLE_REF, limit: z.coerce.number().int().optional(), offset: z.coerce.number().int().optional(),
+    order: z.string().max(63).optional(), dir: z.enum(['asc', 'desc']).optional() }), req.query);
+  const exec = await data.execFor(env.id);
+  const t = await data.tableInfo(exec, b.schema, b.table);
+  const page = await data.readRows(exec, t, { limit: b.limit ?? 50, offset: b.offset ?? 0, order: b.order || undefined, dir: b.dir });
+  res.json({ table: { ...t, editable: data.editable(t) }, ...page });
+}));
+
+r.post('/applications/:id/database/rows', requirePerm('db.data.edit'), ah(async (req, res) => {
+  const { app, env } = await ctx(req);
+  const b = parse(z.object({ ...TABLE_REF, values: VALUES, environment: z.string().optional() }), req.body);
+  const exec = await data.execFor(env.id);
+  const t = await data.tableInfo(exec, b.schema, b.table);
+  await data.writeOne(exec, data.insertSql(t, b.values));
+  // En la auditoría van la tabla y las columnas, no los valores (pueden ser datos personales o sensibles)
+  await audit(req, { action: 'db_row_insert', entityType: 'database', app, details: { environment: env.name, table: `${t.schema}.${t.name}`, columns: Object.keys(b.values) } });
+  res.status(201).json({ ok: true });
+}));
+
+r.put('/applications/:id/database/rows', requirePerm('db.data.edit'), ah(async (req, res) => {
+  const { app, env } = await ctx(req);
+  const b = parse(z.object({ ...TABLE_REF, pk: PK, values: VALUES, environment: z.string().optional() }), req.body);
+  const exec = await data.execFor(env.id);
+  const t = await data.tableInfo(exec, b.schema, b.table);
+  await data.writeOne(exec, data.updateSql(t, b.pk, b.values));
+  await audit(req, { action: 'db_row_update', entityType: 'database', app, details: { environment: env.name, table: `${t.schema}.${t.name}`, pk: b.pk, columns: Object.keys(b.values) } });
+  res.json({ ok: true });
+}));
+
+r.post('/applications/:id/database/rows/delete', requirePerm('db.data.edit'), ah(async (req, res) => {
+  const { app, env } = await ctx(req);
+  const b = parse(z.object({ ...TABLE_REF, pk: PK, environment: z.string().optional() }), req.body);
+  const exec = await data.execFor(env.id);
+  const t = await data.tableInfo(exec, b.schema, b.table);
+  await data.writeOne(exec, data.deleteSql(t, b.pk));
+  await audit(req, { action: 'db_row_delete', entityType: 'database', app, details: { environment: env.name, table: `${t.schema}.${t.name}`, pk: b.pk } });
+  res.json({ ok: true });
 }));
 
 r.get('/databases', requirePerm('db.view'), ah(async (req, res) => {
