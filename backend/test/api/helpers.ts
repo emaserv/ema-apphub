@@ -12,7 +12,7 @@ import { one, pool } from '../../src/db/pool';
 export { one, pool };
 
 export const ADMIN = { username: 'admin', password: process.env.ADMIN_PASSWORD! };
-export type Role = 'superadmin' | 'admin' | 'developer' | 'viewer';
+export type Role = 'superadmin' | 'admin' | 'developer' | 'viewer' | 'user';
 export interface Session { cookie: string; csrf: string }
 
 let server: http.Server;
