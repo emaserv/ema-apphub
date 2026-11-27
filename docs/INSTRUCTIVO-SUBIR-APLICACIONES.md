@@ -35,21 +35,21 @@ app.listen(process.env.PORT || 3000, '0.0.0.0');
 
 ## 2. Roles: ¿quién puede hacer qué?
 
-| Acción | Super Admin | Administrador | Desarrollador | Consulta |
-|---|:-:|:-:|:-:|:-:|
-| Ver aplicaciones y estado | ✔ | ✔ | ✔ | ✔ |
-| Crear aplicaciones / subir versiones | ✔ | ✔ | ✔ | — |
-| Deploy en Desarrollo / Test / Staging | ✔ | ✔ | ✔ | — |
-| Deploy y rollback en **Producción** | ✔ | ✔ | — | — |
-| Variables, puertos, dominios | ✔ | ✔ | (ver) | — |
-| Bases de datos y backups | ✔ | ✔ | (ver) | — |
-| Ver registros de las tablas (pestaña Base de datos → Datos) | ✔ | ✔ | ✔ | — |
-| Agregar, editar y eliminar registros | ✔ | ✔ | — | — |
-| Terminal web | ✔ | — | — | — |
-| Usuarios y roles | ✔ | — | — | — |
-| Asignar quién trabaja en cada aplicación (pestaña **Accesos**) | ✔ | ✔ | — | — |
+| Acción | Super Admin | Administrador | Desarrollador | Consulta | Usuario |
+|---|:-:|:-:|:-:|:-:|:-:|
+| Ver aplicaciones y estado | ✔ | ✔ | ✔ | ✔ | (propias) |
+| Crear aplicaciones / subir versiones | ✔ | ✔ | ✔ | — | ✔ |
+| Deploy en Desarrollo / Test / Staging | ✔ | ✔ | ✔ | — | ✔ |
+| Deploy y rollback en **Producción** | ✔ | ✔ | — | — | ✔ |
+| Variables, puertos, dominios | ✔ | ✔ | (ver) | — | ✔ |
+| Bases de datos y backups | ✔ | ✔ | (ver) | — | (ver) |
+| Ver registros de las tablas (pestaña Base de datos → Datos) | ✔ | ✔ | ✔ | — | ✔ |
+| Agregar, editar y eliminar registros | ✔ | ✔ | — | — | — |
+| Terminal web | ✔ | — | — | — | — |
+| Usuarios y roles | ✔ | — | — | — | — |
+| Asignar quién trabaja en cada aplicación (pestaña **Accesos**) | ✔ | ✔ | — | — | — |
 
-**¿Qué aplicaciones ve cada uno?** Super Admin y Administrador ven todas. Desarrollador y Consulta ven **sólo las aplicaciones que tienen asignadas** (las demás no les aparecen en ningún lado), salvo que en *Usuarios* tengan marcado **"Todas las aplicaciones"**. Quien crea una aplicación queda asignado automáticamente. Las asignaciones se hacen desde *Usuarios* (Super Admin) o desde la pestaña *Accesos* de cada aplicación (Super Admin y Administrador). El rol sigue diciendo qué puede hacer en esas aplicaciones.
+**¿Qué aplicaciones ve cada uno?** Super Admin y Administrador ven todas. Desarrollador y Consulta ven **sólo las aplicaciones que tienen asignadas** (las demás no les aparecen en ningún lado), salvo que en *Usuarios* tengan marcado **"Todas las aplicaciones"**. Quien crea una aplicación queda asignado automáticamente. Las asignaciones se hacen desde *Usuarios* (Super Admin) o desde la pestaña *Accesos* de cada aplicación (Super Admin y Administrador). El rol sigue diciendo qué puede hacer en esas aplicaciones. **Usuario** ve **sólo las aplicaciones que creó él mismo** (también las que clonó); no se le pueden asignar otras ni marcar "Todas". Puede eliminar sus propias aplicaciones.
 
 ---
 

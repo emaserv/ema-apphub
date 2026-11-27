@@ -35,7 +35,7 @@ Plataforma interna de **EMA Servicios** para registrar, almacenar, versionar, co
 * **Dominios + HTTPS** con Traefik y Let's Encrypt, redirección HTTP→HTTPS.
 * **Docker registries** (local, Docker Hub, GHCR, privado).
 * **Webhooks Git** (GitHub, GitLab, Bitbucket) para actualizar/desplegar en cada push.
-* **Usuarios y RBAC** (Super Administrador, Administrador, Desarrollador, Consulta) y **auditoría** completa.
+* **Usuarios y RBAC** (Super Administrador, Administrador, Desarrollador, Consulta, Usuario: sólo ve sus propias apps) y **auditoría** completa.
 * **Dashboard** con estado de aplicaciones, CPU/RAM/disco del servidor, contenedores y consumo por app.
 
 ## Arquitectura (resumen)

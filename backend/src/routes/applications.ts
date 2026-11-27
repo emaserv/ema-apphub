@@ -10,7 +10,7 @@ import { assertDeployPerm, can, requirePerm } from '../middleware/auth';
 import {
   analyzeDir, cloneApplication, createApplication, createVersion, proposeDockerfile, stageFromGit, stagingPath,
 } from '../services/apps';
-import { appAccessParam, grantApp, RESTRICTED_ROLES, visibleAppIds } from '../services/appAccess';
+import { appAccessParam, grantApp, isOwnerScoped, RESTRICTED_ROLES, visibleAppIds } from '../services/appAccess';
 import { closeUserSockets } from '../services/liveSockets';
 import { audit } from '../services/audit';
 import { removeVersionImages } from '../services/cleanup';
@@ -390,6 +390,7 @@ r.put('/applications/:id/access/:uid', requirePerm('apps.access'), ah(async (req
   const { assigned } = parse(z.object({ assigned: z.boolean() }), req.body);
   const u = await one(`SELECT u.id, u.username, r.code AS role FROM users u JOIN roles r ON r.id=u.role_id WHERE u.id::text=$1`, [req.params.uid]);
   if (!u) throw notFound('Usuario no encontrado');
+  if (isOwnerScoped(u.role)) throw badRequest('Los Usuarios sólo ven las aplicaciones que crearon; no se les asignan otras');
   if (!RESTRICTED_ROLES.includes(u.role)) throw badRequest('Superadministradores y Administradores ya ven todas las aplicaciones');
   if (assigned) await grantApp(u.id, app.id, req.user!.id);
   else {

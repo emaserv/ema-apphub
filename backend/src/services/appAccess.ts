@@ -2,6 +2,7 @@
  * Permisos por aplicación. El rol dice QUÉ puede hacer un usuario; la asignación dice EN QUÉ apps.
  * - Superadmin y Admin ven todas las aplicaciones.
  * - Desarrollador y Consulta ven sólo las asignadas (tabla user_applications), salvo que tengan all_apps.
+ * - Usuario ve sólo las aplicaciones que creó él mismo (applications.author_id); no se le asignan otras.
  * Una app sin acceso se responde como "no encontrada" (404), para no revelar que existe.
  */
 import { NextFunction, Request, Response } from 'express';
@@ -12,30 +13,40 @@ import { notFound } from '../lib/http';
 export const UNRESTRICTED_ROLES = ['superadmin', 'admin'];
 /** Roles que se limitan a sus aplicaciones asignadas. */
 export const RESTRICTED_ROLES = ['developer', 'viewer'];
+/** Roles que ven sólo las aplicaciones que crearon ellos mismos (dueños). */
+export const OWNER_ROLES = ['user'];
 
-export const seesAllApps = (role: string, allAppsFlag: boolean) => UNRESTRICTED_ROLES.includes(role) || allAppsFlag;
+export const seesAllApps = (role: string, allAppsFlag: boolean) =>
+  UNRESTRICTED_ROLES.includes(role) || (allAppsFlag && !OWNER_ROLES.includes(role));
 
-interface ScopedUser { id: string; seesAllApps: boolean }
+export const isOwnerScoped = (role?: string) => !!role && OWNER_ROLES.includes(role);
+
+interface ScopedUser { id: string; seesAllApps: boolean; role?: string }
+
+/**
+ * Subconsulta con las apps visibles para un usuario limitado ($1 = id del usuario):
+ * las asignadas o, si su rol es de dueño, las que creó.
+ */
+const visibleSql = (user: ScopedUser) => isOwnerScoped(user.role)
+  ? `SELECT a.id, a.slug FROM applications a WHERE a.author_id=$1`
+  : `SELECT a.id, a.slug FROM user_applications ua JOIN applications a ON a.id=ua.application_id WHERE ua.user_id=$1`;
 
 /** IDs de las apps que puede ver el usuario; `null` = todas (no hace falta filtrar). */
 export async function visibleAppIds(user: ScopedUser): Promise<string[] | null> {
   if (user.seesAllApps) return null;
-  return (await q<{ application_id: string }>(`SELECT application_id FROM user_applications WHERE user_id=$1`, [user.id])).map((r) => r.application_id);
+  return (await q<{ id: string }>(visibleSql(user), [user.id])).map((r) => r.id);
 }
 
 /** Igual que visibleAppIds pero con los slugs (los contenedores e imágenes Docker se etiquetan con el slug). */
 export async function visibleAppSlugs(user: ScopedUser): Promise<Set<string> | null> {
   if (user.seesAllApps) return null;
-  return new Set((await q<{ slug: string }>(
-    `SELECT a.slug FROM user_applications ua JOIN applications a ON a.id=ua.application_id WHERE ua.user_id=$1`, [user.id])).map((r) => r.slug));
+  return new Set((await q<{ slug: string }>(visibleSql(user), [user.id])).map((r) => r.slug));
 }
 
 /** ¿El usuario puede ver la app (por id o slug)? Si la app no existe y el usuario ve todas, devuelve true y la ruta responde 404. */
 export async function canSeeApp(user: ScopedUser, idOrSlug: string): Promise<boolean> {
   if (user.seesAllApps) return true;
-  return !!(await one(
-    `SELECT 1 FROM user_applications ua JOIN applications a ON a.id=ua.application_id
-      WHERE ua.user_id=$1 AND (a.id::text=$2 OR a.slug=$2)`, [user.id, idOrSlug]));
+  return !!(await one(`SELECT 1 FROM (${visibleSql(user)}) v WHERE v.id::text=$2 OR v.slug=$2`, [user.id, idOrSlug]));
 }
 
 /** Para `router.param('id', appAccessParam)`: corta con 404 cualquier ruta /applications/:id de una app no asignada. */

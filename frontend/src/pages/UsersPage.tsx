@@ -5,8 +5,11 @@ import { Field, Modal, Spinner, Switch, useAction, useData } from '../components
 
 /** Roles limitados a sus aplicaciones asignadas (Superadmin y Admin ven todas). */
 const RESTRICTED = ['developer', 'viewer'];
+/** Roles que ven sólo las aplicaciones que crearon ellos mismos. */
+const OWNER = ['user'];
 
 function appsLabel(u: any) {
+  if (OWNER.includes(u.role)) return 'Sólo las propias';
   if (!RESTRICTED.includes(u.role) || u.all_apps) return 'Todas';
   const n = u.application_ids?.length ?? 0;
   return n === 0 ? 'Ninguna' : n === 1 ? '1 aplicación' : `${n} aplicaciones`;
@@ -73,7 +76,8 @@ function UserModal({ user, roles, onClose, onSaved }: { user: any; roles: any[];
         {!isNew && <Switch checked={f.active} onChange={(v) => setF({ ...f, active: v })} label="Usuario activo" />}
         <div className="stack" style={{ gap: 8 }}>
           <b>Aplicaciones</b>
-          {!restricted ? <span className="muted small">Superadministradores y Administradores ven todas las aplicaciones.</span> : (
+          {OWNER.includes(f.role) ? <span className="muted small">Los Usuarios sólo ven las aplicaciones que suben ellos mismos.</span>
+            : !restricted ? <span className="muted small">Superadministradores y Administradores ven todas las aplicaciones.</span> : (
             <>
               <Switch checked={f.allApps} onChange={(v) => setF({ ...f, allApps: v })} label="Todas las aplicaciones (también las que se creen después)" />
               {!f.allApps && (!apps ? <Spinner /> : !apps.length ? <span className="muted small">Todavía no hay aplicaciones.</span> : (

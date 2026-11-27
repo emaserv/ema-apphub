@@ -7,6 +7,7 @@ import { ah, badRequest, conflict, HttpError, notFound, parse } from '../lib/htt
 import { AUTH_COOKIE, authenticate, clearSession, issueSession, requirePerm, revokeSessions, userFromToken } from '../middleware/auth';
 import { audit } from '../services/audit';
 import { closeUserSockets } from '../services/liveSockets';
+import { isOwnerScoped } from '../services/appAccess';
 
 export const publicAuth = Router();
 export const privateAuth = Router();
@@ -75,7 +76,7 @@ privateAuth.get('/users', requirePerm('users.manage'), ah(async (_req, res) => {
                       FROM users u JOIN roles r ON r.id=u.role_id ORDER BY u.full_name`));
 }));
 
-const ROLE = z.enum(['superadmin', 'admin', 'developer', 'viewer']);
+const ROLE = z.enum(['superadmin', 'admin', 'developer', 'viewer', 'user']);
 /** Aplicaciones asignadas (sólo cuentan para Desarrollador y Consulta). */
 const APP_IDS = z.array(z.string().uuid()).max(1000);
 
@@ -94,7 +95,8 @@ privateAuth.post('/users', requirePerm('users.manage'), ah(async (req, res) => {
   const u = await one(`INSERT INTO users (username, email, full_name, password_hash, role_id, must_change_password, all_apps)
                        VALUES ($1,$2,$3,$4,(SELECT id FROM roles WHERE code=$5), true, $6) RETURNING id, username, email, full_name`,
     [b.username, b.email, b.fullName, await bcrypt.hash(b.password, 12), b.role, b.allApps ?? false]);
-  if (b.applicationIds?.length) await setUserApps(u.id, b.applicationIds, req.user!.id);
+  // Usuario (dueño): sólo ve lo que crea, no se le asignan aplicaciones
+  if (b.applicationIds?.length && !isOwnerScoped(b.role)) await setUserApps(u.id, b.applicationIds, req.user!.id);
   await audit(req, { action: 'user_create', entityType: 'user', entityId: u.id,
     details: { username: b.username, role: b.role, allApps: b.allApps ?? false, applications: b.applicationIds?.length ?? 0 } });
   res.status(201).json(u);
@@ -116,7 +118,7 @@ privateAuth.put('/users/:uid', requirePerm('users.manage'), ah(async (req, res) 
     [u.id, b.email ?? null, b.fullName ?? null, b.role ?? null, b.active ?? null, b.password ? await bcrypt.hash(b.password, 12) : null, !!b.password,
      b.allApps ?? null]);
   let appsChanged = false;
-  if (b.applicationIds) {
+  if (b.applicationIds && !isOwnerScoped(b.role ?? u.role)) {
     const before = (await q(`SELECT application_id FROM user_applications WHERE user_id=$1`, [u.id])).map((x) => x.application_id).sort().join();
     await setUserApps(u.id, b.applicationIds, req.user!.id);
     const after = (await q(`SELECT application_id FROM user_applications WHERE user_id=$1`, [u.id])).map((x) => x.application_id).sort().join();

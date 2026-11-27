@@ -3,7 +3,8 @@ INSERT INTO roles (code, name, description) VALUES
  ('superadmin', 'Super Administrador', 'Acceso completo a la plataforma'),
  ('admin',      'Administrador',       'Gestiona aplicaciones, deploys, bases de datos y backups'),
  ('developer',  'Desarrollador',       'Sube código, crea versiones, ve logs y despliega en ambientes no productivos'),
- ('viewer',     'Consulta',            'Sólo lectura de aplicaciones y estados')
+ ('viewer',     'Consulta',            'Sólo lectura de aplicaciones y estados'),
+ ('user',       'Usuario',             'Sube y despliega sus propias aplicaciones; sólo ve las que creó él')
 ON CONFLICT (code) DO UPDATE SET name = EXCLUDED.name, description = EXCLUDED.description;
 
 INSERT INTO permissions (code, description) VALUES
@@ -56,4 +57,12 @@ INSERT INTO role_permissions (role_id, permission_id)
 SELECT r.id, p.id FROM roles r JOIN permissions p
   ON p.code IN ('apps.view','docker.view')
 WHERE r.code = 'viewer'
+ON CONFLICT DO NOTHING;
+
+-- user (Usuario): administra sólo sus propias aplicaciones (la visibilidad por dueño se aplica en el backend)
+INSERT INTO role_permissions (role_id, permission_id)
+SELECT r.id, p.id FROM roles r JOIN permissions p
+  ON p.code IN ('apps.view','apps.create','apps.edit','apps.delete','apps.operate','apps.deploy.nonprod','apps.deploy.prod',
+                'apps.logs','versions.create','db.view','backups.view','docker.view')
+WHERE r.code = 'user'
 ON CONFLICT DO NOTHING;
